@@ -1,0 +1,17 @@
+{
+    "name": "padosoft/laravel-iam-client",
+    "description": "Client Laravel per app che consumano Laravel IAM: login OIDC, verifica JWT/JWKS, introspection, middleware iam.auth/iam.can, Gate adapter, policy cache, webhook receiver.",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": "^8.3",
+        "padosoft/laravel-iam-contracts": "*",
+        "spatie/laravel-package-tools": "^1.16",
+        "lcobucci/jwt": "^5.0",
+        "guzzlehttp/guzzle": "^7.0"
+    },
+    "autoload": { "psr-4": { "Padosoft\\Iam\\Client\\": "src/" } },
+    "extra": { "branch-alias": { "dev-main": "0.1-dev" } },
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}
