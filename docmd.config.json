@@ -1,0 +1,37 @@
+{
+  "title": "Laravel IAM — Client",
+  "description": "The drop-in Laravel client for apps that delegate authorization to a Laravel IAM server: iam.can/iam.auth middleware, Gate adapter, decision caching — fail-closed.",
+  "url": "https://padosoft.github.io/laravel-iam-client",
+  "src": "docs",
+  "out": "site",
+  "base": "/",
+  "layout": {
+    "spa": true,
+    "header": { "enabled": true },
+    "sidebar": { "enabled": true, "collapsible": true, "position": "left" },
+    "footer": { "style": "minimal", "content": "MIT © Padosoft — part of the Laravel IAM ecosystem", "branding": true }
+  },
+  "optionsMenu": {
+    "position": "header",
+    "components": { "search": true, "themeSwitch": true }
+  },
+  "theme": {
+    "name": "default",
+    "appearance": "dark",
+    "customCss": []
+  },
+  "navigation": [
+    { "text": "Home", "url": "/" },
+    { "text": "Getting started", "url": "/getting-started" },
+    { "text": "Concepts", "url": "/concepts" },
+    { "text": "Middleware & Gate", "url": "/middleware-and-gate" },
+    { "text": "Configuration", "url": "/configuration" },
+    { "text": "Reference", "url": "/reference" }
+  ],
+  "plugins": {
+    "search": {},
+    "seo": { "titleTemplate": "%s | Laravel IAM Client" },
+    "sitemap": { "url": "https://padosoft.github.io/laravel-iam-client" },
+    "git": { "repo": "https://github.com/padosoft/laravel-iam-client", "branch": "main", "editLink": true, "lastUpdated": true }
+  }
+}
