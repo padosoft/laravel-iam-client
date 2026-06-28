@@ -5,13 +5,26 @@
     "license": "MIT",
     "require": {
         "php": "^8.3",
-        "padosoft/laravel-iam-contracts": "*",
+        "padosoft/laravel-iam-contracts": "^1.0",
         "spatie/laravel-package-tools": "^1.16",
         "lcobucci/jwt": "^5.0",
         "guzzlehttp/guzzle": "^7.0"
     },
-    "autoload": { "psr-4": { "Padosoft\\Iam\\Client\\": "src/" } },
-    "extra": { "branch-alias": { "dev-main": "0.1-dev" } },
+    "autoload": {
+        "psr-4": {
+            "Padosoft\\Iam\\Client\\": "src/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Padosoft\\Iam\\Client\\IamClientServiceProvider"
+            ]
+        },
+        "branch-alias": {
+            "dev-main": "0.1-dev"
+        }
+    },
     "minimum-stability": "dev",
     "prefer-stable": true
 }
