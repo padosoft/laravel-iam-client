@@ -5,6 +5,7 @@ declare(strict_types=1);
 use GuzzleHttp\Client as GuzzleClient;
 use GuzzleHttp\Handler\MockHandler;
 use GuzzleHttp\HandlerStack;
+use GuzzleHttp\Middleware;
 use GuzzleHttp\Psr7\Response;
 use Illuminate\Cache\ArrayStore;
 use Illuminate\Cache\Repository as CacheRepository;
@@ -151,4 +152,29 @@ it('HttpDecider: 2xx → decisione; non-2xx/transport → deny (fail-closed)', f
 
     expect($fail->decide(new DecisionRequest('reports:view', 'usr_1'))->allowed)->toBeFalse()  // http 500
         ->and($fail->decide(new DecisionRequest('reports:view', 'usr_1'))->allowed)->toBeFalse(); // body non valido
+});
+
+it('HttpDecider: colpisce la rotta slash /decisions/check (non il colon) e scarta l\'envelope {data}', function () {
+    // Il server reale serve `POST {base}/decisions/check` (routes/admin.php, openapi.yaml)
+    // e avvolge la risposta in `{ "data": {...} }` (AdminController::ok()). Questo test fissa
+    // entrambi i contratti: se qualcuno reintroduce il colon o salta l'unwrap, fallisce.
+    $history = [];
+    $stack = HandlerStack::create(new MockHandler([
+        new Response(200, [], (string) json_encode([
+            'data' => ['allowed' => true, 'decision_id' => 'dec_env', 'requires_step_up' => false],
+        ])),
+    ]));
+    $stack->push(Middleware::history($history));
+
+    $decider = new HttpDecider(new GuzzleClient(['handler' => $stack]), 'https://iam.example/api/iam/v1/', 'tok');
+    $decision = $decider->decide(new DecisionRequest('reports:view', 'usr_1'));
+
+    // L'envelope `{data}` è scartato → la decisione è letta correttamente.
+    expect($decision->allowed)->toBeTrue()
+        ->and($decision->decisionId)->toBe('dec_env');
+
+    // L'URL chiamato è la forma slash, non il colon legacy.
+    $path = $history[0]['request']->getUri()->getPath();
+    expect($path)->toBe('/api/iam/v1/decisions/check')
+        ->and($path)->not->toContain('decisions:check');
 });

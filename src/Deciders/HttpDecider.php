@@ -11,7 +11,7 @@ use Padosoft\Iam\Client\IamDecision;
 
 /**
  * Trasporto remoto (doc 06): l'app consumer interroga l'Admin API del server IAM
- * (`POST /decisions:check`) con un Bearer. Fail-closed SENZA eccezioni: qualunque errore di
+ * (`POST /decisions/check`) con un Bearer. Fail-closed SENZA eccezioni: qualunque errore di
  * trasporto/HTTP non-2xx o body inatteso → DENY. Non esiste un opt-out fail-open: un PDP
  * irraggiungibile non deve mai aprire le porte (chi vuole tollerare un outage lo gestisce a livello
  * applicativo, consapevolmente, non nel transport).
@@ -27,7 +27,7 @@ final class HttpDecider implements Decider
     public function decide(DecisionRequest $request): IamDecision
     {
         try {
-            $response = $this->http->request('POST', rtrim($this->baseUrl, '/').'/decisions:check', [
+            $response = $this->http->request('POST', rtrim($this->baseUrl, '/').'/decisions/check', [
                 'headers' => array_filter([
                     'Accept' => 'application/json',
                     'Authorization' => $this->token !== null ? 'Bearer '.$this->token : null,
@@ -46,7 +46,13 @@ final class HttpDecider implements Decider
                 return IamDecision::deny('invalid body');
             }
 
-            return IamDecision::fromArray($decoded);
+            // L'Admin API avvolge ogni risposta in `{ "data": {...} }` (AdminController::ok()).
+            // Scartiamo l'envelope in modo trasparente; un body già flat (es. PDP locale dietro
+            // un proxy) resta valido. Senza questo unwrap, fromArray leggerebbe il livello
+            // sbagliato e ogni decisione diventerebbe un deny silenzioso.
+            $payload = (isset($decoded['data']) && is_array($decoded['data'])) ? $decoded['data'] : $decoded;
+
+            return IamDecision::fromArray($payload);
         } catch (\Throwable $e) {
             return IamDecision::deny('transport: '.$e::class);
         }

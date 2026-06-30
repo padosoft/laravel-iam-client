@@ -7,7 +7,7 @@ namespace Padosoft\Iam\Client;
 /**
  * Richiesta di decisione lato client (doc 09 §5). È il DTO che il client traduce verso il PDP:
  * `mode=local` → array per `AuthorizationEngine::check()`; `mode=http` → body JSON dell'Admin API
- * (`/decisions:check`). Disaccoppia l'app consumer dai value object interni del server.
+ * (`/decisions/check`). Disaccoppia l'app consumer dai value object interni del server.
  */
 final readonly class DecisionRequest
 {
