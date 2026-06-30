@@ -24,7 +24,7 @@ $user->can('billing:invoices.update', $invoice)
         ▼
    IamClient::check()  ──►  DecisionRequest  ──►  Decider
                                                    ├─ LocalDecider  → AuthorizationEngine (in-process PDP)
-                                                   ├─ HttpDecider   → POST /decisions:check (Admin API)
+                                                   ├─ HttpDecider   → POST /decisions/check (Admin API)
                                                    └─ CachingDecider (decorator, short TTL)
         │
         ▼

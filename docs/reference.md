@@ -43,7 +43,8 @@ interface Decider {
 - **`Deciders\LocalDecider`** — `__construct(AuthorizationEngine $engine)`. Calls the in-process PDP; any
   exception → `deny('engine: …')`.
 - **`Deciders\HttpDecider`** — `__construct(ClientInterface $http, string $baseUrl, ?string $token)`. POSTs
-  to `{baseUrl}/decisions:check`; non-2xx, invalid body or transport error → `deny(...)`.
+  to `{baseUrl}/decisions/check` (unwrapping the `{data}` envelope); non-2xx, invalid body or transport
+  error → `deny(...)`.
 - **`Deciders\CachingDecider`** — `__construct(Decider $inner, CacheRepository $cache, int $ttl, bool $enabled = true)`.
   Caches by `DecisionRequest::cacheKey()`; bypasses cache when disabled, `ttl <= 0`, or `explain`.
 

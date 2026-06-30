@@ -17,6 +17,10 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square" alt="License"></a>
 </p>
 
+<p align="center">
+  <strong><a href="https://doc.laravel-iam-client.padosoft.com">📖 Read the documentation →</a></strong>
+</p>
+
 ---
 
 ## Why this package
@@ -171,10 +175,10 @@ $decision->explanation;       // why (when explain=true)
 
 ## Documentation
 
-A docmd doc-site lives in [`docs/`](docs/): start at [`docs/index.md`](docs/index.md), then
-[Getting started](docs/getting-started.md), [Concepts](docs/concepts.md),
-[Middleware & Gate](docs/middleware-and-gate.md), [Configuration](docs/configuration.md) and the
-[Reference](docs/reference.md).
+Full documentation is published at **[doc.laravel-iam-client.padosoft.com](https://doc.laravel-iam-client.padosoft.com)** —
+quickstart, guides (`iam.can`, the Gate adapter, the facade, transports, ReBAC, step-up, caching), the
+fail-closed theory, architecture + ADRs, and a complete PHP/config reference. The source for that site lives
+in [`docs-site/`](docs-site/); a lightweight in-repo copy is under [`docs/`](docs/).
 
 ## Security
 
