@@ -111,6 +111,28 @@ IAM_CLIENT_ORG=org_acme
 That's it — the service provider wires the right decider (with caching) and registers the middleware
 aliases and the Gate adapter automatically.
 
+#### Authentication modes (choose one)
+
+The SDK authenticates to the PDP in one of two ways:
+
+- **Static token** (default, above): you supply a service bearer token via `IAM_CLIENT_TOKEN`, obtained
+  out of band.
+- **Self-managed `client_credentials` (recommended for long-running services)**: give the SDK your OAuth
+  `client_id` + `client_secret` and it **mints and refreshes the token itself**, and — when IAM
+  **auto-rotates** the secret — it **self-fetches the new one** (during the grace) and hot-swaps it, so the
+  service never breaks on a rotation and you never touch a secret by hand. Takes precedence over the static
+  token when set.
+
+  ```dotenv
+  IAM_CLIENT_ID=cli_billing
+  IAM_CLIENT_SECRET=the-secret-iam-issued   # rotatable; the SDK follows rotations automatically
+  IAM_CLIENT_OAUTH_URL=https://iam.example.com/oauth   # optional; derived from base_url if omitted
+  ```
+
+  The rotated secret is cached (in your cache store) on pickup; enable IAM's self-fetch endpoint server-side
+  with `IAM_OAUTH_CLIENT_SELFFETCH=true`. See
+  [Application credentials & lifecycle](https://doc.laravel-iam-server.padosoft.com/guides/application-credentials).
+
 ### 2. Protect routes with `iam.can`
 
 ```php
