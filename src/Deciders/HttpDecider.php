@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Padosoft\Iam\Client\Deciders;
 
 use GuzzleHttp\ClientInterface;
+use Padosoft\Iam\Client\Auth\TokenProvider;
 use Padosoft\Iam\Client\Contracts\Decider;
 use Padosoft\Iam\Client\DecisionRequest;
 use Padosoft\Iam\Client\IamDecision;
@@ -21,16 +22,17 @@ final class HttpDecider implements Decider
     public function __construct(
         private readonly ClientInterface $http,
         private readonly string $baseUrl,
-        private readonly ?string $token,
+        private readonly TokenProvider $tokens,
     ) {}
 
     public function decide(DecisionRequest $request): IamDecision
     {
         try {
+            $token = $this->tokens->resolve();
             $response = $this->http->request('POST', rtrim($this->baseUrl, '/').'/decisions/check', [
                 'headers' => array_filter([
                     'Accept' => 'application/json',
-                    'Authorization' => $this->token !== null ? 'Bearer '.$this->token : null,
+                    'Authorization' => $token !== null ? 'Bearer '.$token : null,
                 ]),
                 'json' => $request->toArray(),
                 'http_errors' => false,

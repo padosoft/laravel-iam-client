@@ -10,6 +10,8 @@ use GuzzleHttp\Psr7\Response;
 use Illuminate\Cache\ArrayStore;
 use Illuminate\Cache\Repository as CacheRepository;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Padosoft\Iam\Client\Auth\ClientCredentialsTokenProvider;
+use Padosoft\Iam\Client\Auth\StaticTokenProvider;
 use Padosoft\Iam\Client\Contracts\Decider;
 use Padosoft\Iam\Client\Deciders\CachingDecider;
 use Padosoft\Iam\Client\Deciders\HttpDecider;
@@ -143,12 +145,12 @@ it('LocalDecider: un errore del PDP in-process → deny (fail-closed)', function
 
 it('HttpDecider: 2xx → decisione; non-2xx/transport → deny (fail-closed)', function () {
     $okMock = new MockHandler([new Response(200, [], (string) json_encode(['allowed' => true, 'decision_id' => 'dec_http']))]);
-    $ok = new HttpDecider(new GuzzleClient(['handler' => HandlerStack::create($okMock)]), 'https://iam.example/api/iam/v1', 'tok');
+    $ok = new HttpDecider(new GuzzleClient(['handler' => HandlerStack::create($okMock)]), 'https://iam.example/api/iam/v1', new StaticTokenProvider('tok'));
 
     expect($ok->decide(new DecisionRequest('reports:view', 'usr_1'))->allowed)->toBeTrue();
 
     $failMock = new MockHandler([new Response(500), new Response(200, [], 'not-json')]);
-    $fail = new HttpDecider(new GuzzleClient(['handler' => HandlerStack::create($failMock)]), 'https://iam.example/api/iam/v1', 'tok');
+    $fail = new HttpDecider(new GuzzleClient(['handler' => HandlerStack::create($failMock)]), 'https://iam.example/api/iam/v1', new StaticTokenProvider('tok'));
 
     expect($fail->decide(new DecisionRequest('reports:view', 'usr_1'))->allowed)->toBeFalse()  // http 500
         ->and($fail->decide(new DecisionRequest('reports:view', 'usr_1'))->allowed)->toBeFalse(); // body non valido
@@ -166,7 +168,7 @@ it('HttpDecider: colpisce la rotta slash /decisions/check (non il colon) e scart
     ]));
     $stack->push(Middleware::history($history));
 
-    $decider = new HttpDecider(new GuzzleClient(['handler' => $stack]), 'https://iam.example/api/iam/v1/', 'tok');
+    $decider = new HttpDecider(new GuzzleClient(['handler' => $stack]), 'https://iam.example/api/iam/v1/', new StaticTokenProvider('tok'));
     $decision = $decider->decide(new DecisionRequest('reports:view', 'usr_1'));
 
     // L'envelope `{data}` è scartato → la decisione è letta correttamente.
@@ -177,4 +179,34 @@ it('HttpDecider: colpisce la rotta slash /decisions/check (non il colon) e scart
     $path = $history[0]['request']->getUri()->getPath();
     expect($path)->toBe('/api/iam/v1/decisions/check')
         ->and($path)->not->toContain('decisions:check');
+});
+
+it('ClientCredentialsTokenProvider: ottiene e cacha il token via client_credentials', function () {
+    $mock = new MockHandler([new Response(200, [], (string) json_encode(['access_token' => 'AT1', 'expires_in' => 900]))]);
+    $cache = new CacheRepository(new ArrayStore);
+    $p = new ClientCredentialsTokenProvider(new GuzzleClient(['handler' => HandlerStack::create($mock)]), 'https://iam.example/oauth', 'cli_x', 'sec', $cache);
+
+    // Prima chiamata: mint; seconda: dalla cache (il mock ha una sola risposta, quindi se non cachasse fallirebbe).
+    expect($p->resolve())->toBe('AT1')
+        ->and($p->resolve())->toBe('AT1');
+});
+
+it('ClientCredentialsTokenProvider: su 401 auto-ritira il secret ruotato e riprova (rollover trasparente)', function () {
+    $mock = new MockHandler([
+        new Response(401, [], 'invalid_client'),                                                        // token col secret vecchio
+        new Response(200, [], (string) json_encode(['rotated' => true, 'client_secret' => 'NEW'])),      // self-fetch del nuovo
+        new Response(200, [], (string) json_encode(['access_token' => 'AT2', 'expires_in' => 900])),     // retry col nuovo
+    ]);
+    $cache = new CacheRepository(new ArrayStore);
+    $p = new ClientCredentialsTokenProvider(new GuzzleClient(['handler' => HandlerStack::create($mock)]), 'https://iam.example/oauth', 'cli_x', 'OLD', $cache);
+
+    expect($p->resolve())->toBe('AT2');
+    expect($cache->get('iam-client:cc-secret:'.sha1('cli_x|https://iam.example/oauth')))->toBe('NEW');
+});
+
+it('ClientCredentialsTokenProvider: se token e self-fetch falliscono, resolve() è null (fail-closed)', function () {
+    $mock = new MockHandler([new Response(500), new Response(500)]);
+    $p = new ClientCredentialsTokenProvider(new GuzzleClient(['handler' => HandlerStack::create($mock)]), 'https://iam.example/oauth', 'cli_x', 'sec', new CacheRepository(new ArrayStore));
+
+    expect($p->resolve())->toBeNull();
 });

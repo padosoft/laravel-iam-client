@@ -14,7 +14,15 @@ return [
 
     'http' => [
         'base_url' => env('IAM_CLIENT_BASE_URL'),     // es. https://iam.example.com/api/iam/v1
-        'token' => env('IAM_CLIENT_TOKEN'),           // Bearer per l'Admin API
+        // Autenticazione al PDP — DUE modalità (scegline UNA):
+        //  a) token statico: fornisci un service token ottenuto fuori banda.
+        'token' => env('IAM_CLIENT_TOKEN'),           // Bearer statico per l'Admin API
+        //  b) client_credentials auto-gestito: se imposti client_id + client_secret, l'SDK ottiene e
+        //     rinnova il token da solo, e AUTO-RUOTA il secret (self-fetch) quando il server lo ruota →
+        //     nessun downtime, nessun intervento. Ha precedenza sul token statico se entrambi impostati.
+        'client_id' => env('IAM_CLIENT_ID'),          // es. cli_myapp
+        'client_secret' => env('IAM_CLIENT_SECRET'),  // il secret emesso da IAM (ruotabile)
+        'oauth_url' => env('IAM_CLIENT_OAUTH_URL'),    // es. https://iam.example.com/oauth (altrimenti derivato da base_url)
         'timeout' => 5,
     ],
 
