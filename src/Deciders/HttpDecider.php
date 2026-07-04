@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Padosoft\Iam\Client\Deciders;
 
 use GuzzleHttp\ClientInterface;
+use Padosoft\Iam\Client\Auth\StaticTokenProvider;
 use Padosoft\Iam\Client\Auth\TokenProvider;
 use Padosoft\Iam\Client\Contracts\Decider;
 use Padosoft\Iam\Client\DecisionRequest;
@@ -19,11 +20,19 @@ use Padosoft\Iam\Client\IamDecision;
  */
 final class HttpDecider implements Decider
 {
+    private readonly TokenProvider $tokens;
+
+    /**
+     * @param  TokenProvider|string|null  $tokens  A TokenProvider, or — for backward compatibility — a raw
+     *                                             static bearer token (or null for none), wrapped transparently.
+     */
     public function __construct(
         private readonly ClientInterface $http,
         private readonly string $baseUrl,
-        private readonly TokenProvider $tokens,
-    ) {}
+        TokenProvider|string|null $tokens,
+    ) {
+        $this->tokens = $tokens instanceof TokenProvider ? $tokens : new StaticTokenProvider($tokens);
+    }
 
     public function decide(DecisionRequest $request): IamDecision
     {
