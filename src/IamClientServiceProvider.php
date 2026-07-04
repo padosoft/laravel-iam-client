@@ -9,6 +9,7 @@ use Illuminate\Contracts\Auth\Access\Gate;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Routing\Router;
 use Padosoft\Iam\Client\Auth\ClientCredentialsTokenProvider;
+use Padosoft\Iam\Client\Auth\PrivateKeyJwtTokenProvider;
 use Padosoft\Iam\Client\Auth\StaticTokenProvider;
 use Padosoft\Iam\Client\Auth\TokenProvider;
 use Padosoft\Iam\Client\Contracts\Decider;
@@ -95,6 +96,20 @@ final class IamClientServiceProvider extends PackageServiceProvider
     private function makeTokenProvider(Application $app): TokenProvider
     {
         $clientId = $this->stringConfig('http.client_id');
+
+        // private_key_jwt (RFC 7523): asymmetric, no shared secret. Highest precedence when a private key is set.
+        $privateKey = $this->resolvePrivateKey();
+        if ($clientId !== null && $privateKey !== null) {
+            return new PrivateKeyJwtTokenProvider(
+                new GuzzleClient(['timeout' => $this->intConfig('http.timeout', 5)]),
+                $this->stringConfig('http.oauth_url') ?? $this->deriveOauthUrl(),
+                $clientId,
+                $privateKey,
+                $this->stringConfig('http.private_key_kid'),
+                $app->make('cache')->store($this->stringConfig('cache.store')),
+            );
+        }
+
         $secret = $this->stringConfig('http.client_secret');
         if ($clientId !== null && $secret !== null) {
             return new ClientCredentialsTokenProvider(
@@ -107,6 +122,22 @@ final class IamClientServiceProvider extends PackageServiceProvider
         }
 
         return new StaticTokenProvider($this->stringConfig('http.token'));
+    }
+
+    /** The ES256 private key for private_key_jwt: inline PEM in config, or a readable file path to one. */
+    private function resolvePrivateKey(): ?string
+    {
+        $key = $this->stringConfig('http.private_key');
+        if ($key === null) {
+            return null;
+        }
+        if (!str_contains($key, 'BEGIN') && is_file($key)) {
+            $content = file_get_contents($key);
+
+            return is_string($content) && $content !== '' ? $content : null;
+        }
+
+        return $key;
     }
 
     /** Best-effort: dall'Admin API base (.../api/iam/v1) risale al prefisso OAuth /oauth sull'host. */

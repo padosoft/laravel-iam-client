@@ -22,6 +22,11 @@ return [
         //     nessun downtime, nessun intervento. Ha precedenza sul token statico se entrambi impostati.
         'client_id' => env('IAM_CLIENT_ID'),          // es. cli_myapp
         'client_secret' => env('IAM_CLIENT_SECRET'),  // il secret emesso da IAM (ruotabile)
+        //  c) private_key_jwt (RFC 7523) — auth ASIMMETRICA, nessun secret condiviso: se imposti una chiave
+        //     privata ES256 (PEM inline o path a un file), l'SDK firma un assertion e la usa al posto del
+        //     secret. Ha precedenza su client_secret. La chiave PUBBLICA va registrata in IAM (JWKS).
+        'private_key' => env('IAM_CLIENT_PRIVATE_KEY'),         // PEM ES256 (contenuto) oppure path a un .pem
+        'private_key_kid' => env('IAM_CLIENT_PRIVATE_KEY_KID'), // kid della chiave nel JWKS registrato
         'oauth_url' => env('IAM_CLIENT_OAUTH_URL'),    // es. https://iam.example.com/oauth (altrimenti derivato da base_url)
         'timeout' => 5,
     ],
