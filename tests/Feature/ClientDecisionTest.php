@@ -11,6 +11,7 @@ use Illuminate\Cache\ArrayStore;
 use Illuminate\Cache\Repository as CacheRepository;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Padosoft\Iam\Client\Auth\ClientCredentialsTokenProvider;
+use Padosoft\Iam\Client\Auth\PrivateKeyJwtTokenProvider;
 use Padosoft\Iam\Client\Auth\StaticTokenProvider;
 use Padosoft\Iam\Client\Contracts\Decider;
 use Padosoft\Iam\Client\Deciders\CachingDecider;
@@ -217,4 +218,29 @@ it('HttpDecider: accetta ancora un token stringa (retro-compat) oltre al TokenPr
     $decider = new HttpDecider(new GuzzleClient(['handler' => HandlerStack::create($mock)]), 'https://iam.example/api/iam/v1', 'raw-token');
 
     expect($decider->decide(new DecisionRequest('reports:view', 'usr_1'))->allowed)->toBeTrue();
+});
+
+it('PrivateKeyJwtTokenProvider: firma un assertion ES256 e ottiene il token (nessun secret condiviso)', function () {
+    $cnf = sys_get_temp_dir().DIRECTORY_SEPARATOR.'iam-client-openssl.cnf';
+    if (!is_file($cnf)) {
+        file_put_contents($cnf, "[req]\n");
+    }
+    $res = openssl_pkey_new(['private_key_type' => OPENSSL_KEYTYPE_EC, 'curve_name' => 'prime256v1', 'private_key_bits' => 2048, 'config' => $cnf]);
+    openssl_pkey_export($res, $pem, null, ['config' => $cnf]);
+
+    $history = [];
+    $stack = HandlerStack::create(new MockHandler([new Response(200, [], (string) json_encode(['access_token' => 'AT-PK', 'expires_in' => 900]))]));
+    $stack->push(Middleware::history($history));
+    $cache = new CacheRepository(new ArrayStore);
+
+    $p = new PrivateKeyJwtTokenProvider(new GuzzleClient(['handler' => $stack]), 'https://iam.example/oauth', 'cli_pk', $pem, 'k1', $cache);
+
+    expect($p->resolve())->toBe('AT-PK')
+        ->and($p->resolve())->toBe('AT-PK'); // seconda volta dalla cache (una sola risposta mock)
+
+    // La richiesta ha usato un client_assertion (JWT a 3 segmenti), NON un client_secret.
+    parse_str((string) $history[0]['request']->getBody(), $params);
+    expect($params['client_assertion_type'])->toBe('urn:ietf:params:oauth:client-assertion-type:jwt-bearer')
+        ->and(substr_count((string) $params['client_assertion'], '.'))->toBe(2)
+        ->and($params)->not->toHaveKey('client_secret');
 });
