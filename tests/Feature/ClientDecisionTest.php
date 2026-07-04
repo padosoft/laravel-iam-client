@@ -210,3 +210,11 @@ it('ClientCredentialsTokenProvider: se token e self-fetch falliscono, resolve() 
 
     expect($p->resolve())->toBeNull();
 });
+
+it('HttpDecider: accetta ancora un token stringa (retro-compat) oltre al TokenProvider', function () {
+    $mock = new MockHandler([new Response(200, [], (string) json_encode(['allowed' => true, 'decision_id' => 'dec_bc']))]);
+    // Terzo argomento come stringa grezza (API v1.1) — deve continuare a funzionare, avvolto in StaticTokenProvider.
+    $decider = new HttpDecider(new GuzzleClient(['handler' => HandlerStack::create($mock)]), 'https://iam.example/api/iam/v1', 'raw-token');
+
+    expect($decider->decide(new DecisionRequest('reports:view', 'usr_1'))->allowed)->toBeTrue();
+});
