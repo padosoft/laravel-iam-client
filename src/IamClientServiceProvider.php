@@ -12,6 +12,7 @@ use Padosoft\Iam\Client\Auth\ClientCredentialsTokenProvider;
 use Padosoft\Iam\Client\Auth\PrivateKeyJwtTokenProvider;
 use Padosoft\Iam\Client\Auth\StaticTokenProvider;
 use Padosoft\Iam\Client\Auth\TokenProvider;
+use Padosoft\Iam\Client\Console\ManifestPushCommand;
 use Padosoft\Iam\Client\Contracts\Decider;
 use Padosoft\Iam\Client\Deciders\CachingDecider;
 use Padosoft\Iam\Client\Deciders\HttpDecider;
@@ -32,11 +33,14 @@ final class IamClientServiceProvider extends PackageServiceProvider
 {
     public function configurePackage(Package $package): void
     {
-        $package->name('laravel-iam-client')->hasConfigFile('iam-client');
+        $package->name('laravel-iam-client')->hasConfigFile('iam-client')->hasCommand(ManifestPushCommand::class);
     }
 
     public function packageRegistered(): void
     {
+        // Expose the resolved TokenProvider so the push command (and the app) can obtain a bearer.
+        $this->app->singleton(TokenProvider::class, fn (Application $app): TokenProvider => $this->makeTokenProvider($app));
+
         $this->app->singleton(Decider::class, fn (Application $app): Decider => $this->makeDecider($app));
 
         $this->app->singleton(IamClient::class, fn (Application $app): IamClient => new IamClient(
