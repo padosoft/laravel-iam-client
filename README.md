@@ -197,6 +197,24 @@ $decision->requiresStepUp;    // true → ask the user to re-authenticate at a h
 $decision->explanation;       // why (when explain=true)
 ```
 
+### 5. Declare your permissions/roles: push a manifest
+
+Apps that don't use spatie/laravel-permission **declare** their permission catalog + roles in a manifest file
+(versioned in your repo — it *is* your source of truth). Push it to IAM whenever it changes:
+
+```bash
+# validate locally against the published schema (any JSON-schema tool works):
+#   curl https://your-iam.example.com/.well-known/iam-manifest-schema.json
+php artisan iam:manifest:push resources/iam/manifest.json          # app.key comes from the manifest
+php artisan iam:manifest:push resources/iam/manifest.json --app=warehouse
+```
+
+It submits to IAM's Admin API (authenticated with this client's own bearer — the token needs
+`iam:manifests.submit`). IAM diffs it: additive changes apply, a **removal** is gated for approval in the
+console and the removed role/permission is **deprecated** (kept for history, disabled), never deleted. Run it
+in CI on deploy for hands-off sync. See
+[Keeping IAM in sync](https://doc.laravel-iam-server.padosoft.com/guides/keeping-in-sync).
+
 ## How it fits the ecosystem
 
 | Package | Role |
