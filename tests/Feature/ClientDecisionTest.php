@@ -10,6 +10,7 @@ use GuzzleHttp\Psr7\Response;
 use Illuminate\Cache\ArrayStore;
 use Illuminate\Cache\Repository as CacheRepository;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Crypt;
 use Padosoft\Iam\Client\Auth\ClientCredentialsTokenProvider;
 use Padosoft\Iam\Client\Auth\PrivateKeyJwtTokenProvider;
 use Padosoft\Iam\Client\Auth\StaticTokenProvider;
@@ -205,7 +206,7 @@ it('ClientCredentialsTokenProvider: su 401 auto-ritira il secret ruotato e ripro
     // IAM-25: il secret ruotato è cifrato at-rest in cache (mai in chiaro) → si verifica decifrandolo.
     $stored = $cache->get('iam-client:cc-secret:'.sha1('cli_x|https://iam.example/oauth'));
     expect($stored)->not->toBe('NEW') // non è più in chiaro
-        ->and(\Illuminate\Support\Facades\Crypt::decryptString($stored))->toBe('NEW');
+        ->and(Crypt::decryptString($stored))->toBe('NEW');
 });
 
 it('ClientCredentialsTokenProvider: un oauth_url http:// (non-localhost) è fail-closed → null (IAM-39)', function () {
