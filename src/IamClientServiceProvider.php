@@ -51,6 +51,7 @@ final class IamClientServiceProvider extends PackageServiceProvider
         $this->app->singleton(IamGateAdapter::class, fn (Application $app): IamGateAdapter => new IamGateAdapter(
             $app->make(IamClient::class),
             $this->stringConfig('gate.intercept') ?? 'namespaced',
+            $this->stringListConfig('gate.app_keys'), // IAM-40: intercetta solo questi prefissi app (vuoto = tutte le namespaced)
         ));
     }
 
@@ -122,6 +123,7 @@ final class IamClientServiceProvider extends PackageServiceProvider
                 $clientId,
                 $secret,
                 $app->make('cache')->store($this->stringConfig('cache.store')),
+                allowInsecureTransport: $this->boolConfig('http.allow_insecure', false), // IAM-39
             );
         }
 
@@ -181,6 +183,28 @@ final class IamClientServiceProvider extends PackageServiceProvider
         $value = $this->app->make('config')->get('iam-client.'.$key, $default);
 
         return is_bool($value) ? $value : $default;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function stringListConfig(string $key): array
+    {
+        $value = $this->app->make('config')->get('iam-client.'.$key, []);
+        if (!is_array($value)) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($value as $item) {
+            // Trim + scarta le stringhe vuote: "warehouse, billing" → ['warehouse','billing'] (senza
+            // ' billing' che non matcherebbe mai un prefisso ability). '0' resta valido (confronto esplicito).
+            if (is_string($item) && trim($item) !== '') {
+                $out[] = trim($item);
+            }
+        }
+
+        return $out;
     }
 
     private function intConfig(string $key, int $default): int

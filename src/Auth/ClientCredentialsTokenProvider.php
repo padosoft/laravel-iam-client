@@ -6,6 +6,7 @@ namespace Padosoft\Iam\Client\Auth;
 
 use GuzzleHttp\ClientInterface;
 use Illuminate\Contracts\Cache\Repository as Cache;
+use Illuminate\Support\Facades\Crypt;
 
 /**
  * Ottiene un access token via **client_credentials** (client_id + client_secret) e lo cacha fino a poco
@@ -16,6 +17,9 @@ use Illuminate\Contracts\Cache\Repository as Cache;
  */
 final class ClientCredentialsTokenProvider implements TokenProvider
 {
+    /** IAM-25: TTL del secret auto-ruotato in cache (mai `forever`) — 30 giorni, ben oltre una rotazione. */
+    private const ROTATED_SECRET_TTL = 2592000;
+
     public function __construct(
         private readonly ClientInterface $http,
         private readonly string $oauthUrl,   // es. https://iam.example.com/oauth
@@ -23,16 +27,38 @@ final class ClientCredentialsTokenProvider implements TokenProvider
         private readonly string $configSecret,
         private readonly Cache $cache,
         private readonly int $skew = 30,     // rinnova il token N secondi prima della scadenza
+        private readonly bool $allowInsecureTransport = false, // IAM-39: http:// ammesso solo se true (dev)
     ) {}
 
     public function resolve(): ?string
     {
+        // IAM-39: non spedire MAI client_secret/bearer su un endpoint non-https. Un URL http:// (salvo
+        // localhost o allow-insecure esplicito) è fail-closed → null (il PDP negherà) invece di leak in chiaro.
+        if (!$this->transportAllowed()) {
+            return null;
+        }
+
         $cached = $this->cache->get($this->tokenKey());
         if (is_string($cached) && $cached !== '') {
             return $cached;
         }
 
         return $this->mint();
+    }
+
+    private function transportAllowed(): bool
+    {
+        $scheme = strtolower((string) parse_url($this->oauthUrl, PHP_URL_SCHEME));
+        if ($scheme === 'https') {
+            return true;
+        }
+        if ($scheme === 'http') {
+            $host = strtolower((string) parse_url($this->oauthUrl, PHP_URL_HOST));
+
+            return $this->allowInsecureTransport || in_array($host, ['localhost', '127.0.0.1', '::1'], true);
+        }
+
+        return false; // scheme assente/sconosciuto → fail-closed
     }
 
     private function mint(): ?string
@@ -85,7 +111,9 @@ final class ClientCredentialsTokenProvider implements TokenProvider
             }
             $body = json_decode((string) $res->getBody(), true);
             if (is_array($body) && ($body['rotated'] ?? false) === true && is_string($body['client_secret'] ?? null) && $body['client_secret'] !== '') {
-                $this->cache->forever($this->secretKey(), $body['client_secret']);
+                // IAM-25: cifra il secret at-rest (Crypt/APP_KEY) e con un TTL limitato — mai in chiaro,
+                // mai `forever`. La cache non deve diventare una copia recuperabile in chiaro di una credenziale.
+                $this->cache->put($this->secretKey(), Crypt::encryptString($body['client_secret']), self::ROTATED_SECRET_TTL);
 
                 return true;
             }
@@ -98,9 +126,27 @@ final class ClientCredentialsTokenProvider implements TokenProvider
 
     private function currentSecret(): string
     {
+        // IAM-25: il secret ruotato è cifrato in cache; decifra.
         $stored = $this->cache->get($this->secretKey());
+        if (is_string($stored) && $stored !== '') {
+            try {
+                return Crypt::decryptString($stored);
+            } catch (\Throwable) {
+                // Backward-compat: una release precedente cacheva il secret ruotato in CHIARO (forever).
+                // NON scartarlo (regredirebbe a fail-closed durante il rollover, usando un config secret
+                // ormai vecchio): trattalo come legacy-plaintext, ri-cifralo con TTL (migrazione one-time)
+                // e usalo. Se anche la ri-cifratura fallisce, usa comunque il valore legacy.
+                try {
+                    $this->cache->put($this->secretKey(), Crypt::encryptString($stored), self::ROTATED_SECRET_TTL);
+                } catch (\Throwable) {
+                    // best-effort re-encrypt; il valore legacy resta usabile
+                }
 
-        return is_string($stored) && $stored !== '' ? $stored : $this->configSecret;
+                return $stored;
+            }
+        }
+
+        return $this->configSecret;
     }
 
     private function url(string $path): string

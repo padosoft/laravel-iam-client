@@ -10,6 +10,7 @@ use GuzzleHttp\Psr7\Response;
 use Illuminate\Cache\ArrayStore;
 use Illuminate\Cache\Repository as CacheRepository;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Crypt;
 use Padosoft\Iam\Client\Auth\ClientCredentialsTokenProvider;
 use Padosoft\Iam\Client\Auth\PrivateKeyJwtTokenProvider;
 use Padosoft\Iam\Client\Auth\StaticTokenProvider;
@@ -202,7 +203,34 @@ it('ClientCredentialsTokenProvider: su 401 auto-ritira il secret ruotato e ripro
     $p = new ClientCredentialsTokenProvider(new GuzzleClient(['handler' => HandlerStack::create($mock)]), 'https://iam.example/oauth', 'cli_x', 'OLD', $cache);
 
     expect($p->resolve())->toBe('AT2');
-    expect($cache->get('iam-client:cc-secret:'.sha1('cli_x|https://iam.example/oauth')))->toBe('NEW');
+    // IAM-25: il secret ruotato è cifrato at-rest in cache (mai in chiaro) → si verifica decifrandolo.
+    $stored = $cache->get('iam-client:cc-secret:'.sha1('cli_x|https://iam.example/oauth'));
+    expect($stored)->not->toBe('NEW') // non è più in chiaro
+        ->and(Crypt::decryptString($stored))->toBe('NEW');
+});
+
+it('ClientCredentialsTokenProvider: un oauth_url http:// (non-localhost) è fail-closed → null (IAM-39)', function () {
+    $mock = new MockHandler([new Response(200, [], (string) json_encode(['access_token' => 'AT', 'expires_in' => 900]))]);
+    $p = new ClientCredentialsTokenProvider(new GuzzleClient(['handler' => HandlerStack::create($mock)]), 'http://iam.example/oauth', 'cli_x', 'sec', new CacheRepository(new ArrayStore));
+
+    expect($p->resolve())->toBeNull();
+});
+
+it('ClientCredentialsTokenProvider: un secret legacy in CHIARO in cache è usato e migrato a cifrato (IAM-25 backward-compat)', function () {
+    // Simula una release precedente: il secret ruotato era cachato in CHIARO (cache->forever).
+    $cache = new CacheRepository(new ArrayStore);
+    $key = 'iam-client:cc-secret:'.sha1('cli_x|https://iam.example/oauth');
+    $cache->forever($key, 'LEGACY');
+
+    $mock = new MockHandler([new Response(200, [], (string) json_encode(['access_token' => 'AT', 'expires_in' => 900]))]);
+    $p = new ClientCredentialsTokenProvider(new GuzzleClient(['handler' => HandlerStack::create($mock)]), 'https://iam.example/oauth', 'cli_x', 'CONFIG', $cache);
+
+    // Il valore legacy NON viene scartato (niente regressione a fail-closed durante il rollover).
+    expect($p->resolve())->toBe('AT');
+    // ...ed è stato migrato: ora è cifrato at-rest e decifra al valore legacy.
+    $stored = $cache->get($key);
+    expect($stored)->not->toBe('LEGACY')
+        ->and(Crypt::decryptString($stored))->toBe('LEGACY');
 });
 
 it('ClientCredentialsTokenProvider: se token e self-fetch falliscono, resolve() è null (fail-closed)', function () {
