@@ -51,6 +51,7 @@ final class IamClientServiceProvider extends PackageServiceProvider
         $this->app->singleton(IamGateAdapter::class, fn (Application $app): IamGateAdapter => new IamGateAdapter(
             $app->make(IamClient::class),
             $this->stringConfig('gate.intercept') ?? 'namespaced',
+            $this->stringListConfig('gate.app_keys'), // IAM-40: intercetta solo questi prefissi app (vuoto = tutte le namespaced)
         ));
     }
 
@@ -122,6 +123,7 @@ final class IamClientServiceProvider extends PackageServiceProvider
                 $clientId,
                 $secret,
                 $app->make('cache')->store($this->stringConfig('cache.store')),
+                allowInsecureTransport: $this->boolConfig('http.allow_insecure', false), // IAM-39
             );
         }
 
@@ -181,6 +183,16 @@ final class IamClientServiceProvider extends PackageServiceProvider
         $value = $this->app->make('config')->get('iam-client.'.$key, $default);
 
         return is_bool($value) ? $value : $default;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function stringListConfig(string $key): array
+    {
+        $value = $this->app->make('config')->get('iam-client.'.$key, []);
+
+        return is_array($value) ? array_values(array_filter($value, 'is_string')) : [];
     }
 
     private function intConfig(string $key, int $default): int

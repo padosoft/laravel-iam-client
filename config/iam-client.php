@@ -29,6 +29,9 @@ return [
         'private_key_kid' => env('IAM_CLIENT_PRIVATE_KEY_KID'), // kid della chiave nel JWKS registrato
         'oauth_url' => env('IAM_CLIENT_OAUTH_URL'),    // es. https://iam.example.com/oauth (altrimenti derivato da base_url)
         'timeout' => 5,
+        // IAM-39: consenti http:// verso il token endpoint (client_secret/bearer in CHIARO). Solo dev.
+        // Default false = fail-closed: un endpoint non-https (salvo localhost) non riceve credenziali.
+        'allow_insecure' => (bool) env('IAM_CLIENT_ALLOW_INSECURE', false),
     ],
 
     // Tipo di subject e applicazione/organizzazione di default per le query di decisione.
@@ -52,6 +55,10 @@ return [
         // 'namespaced' = intercetta solo le ability con ':' (forma app:permesso), lasciando le Gate
         // locali invariate; 'all' = intercetta tutte le ability.
         'intercept' => 'namespaced',
+        // IAM-40: se valorizzato, intercetta SOLO le ability il cui prefisso (`app:`) è in questa lista —
+        // così un'ability namespaced di terze parti (es. `log:viewer`) non viene rivendicata/negata da IAM.
+        // Vuoto = comportamento storico (tutte le namespaced). Es.: ['warehouse', 'billing'].
+        'app_keys' => array_values(array_filter(explode(',', (string) env('IAM_CLIENT_APP_KEYS', '')))),
     ],
 
     // Nota: il transport è SEMPRE fail-closed (un PDP irraggiungibile nega). Non esiste un opt-out

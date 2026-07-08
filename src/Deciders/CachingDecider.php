@@ -29,7 +29,13 @@ final class CachingDecider implements Decider
             return $this->inner->decide($request);
         }
 
-        $key = 'iam:dec:'.$request->cacheKey();
+        // IAM-23: se la chiave di cache non è calcolabile (context non serializzabile), NON cachare — una
+        // chiave che collide servirebbe un ALLOW di un subject a un altro. Delega all'inner (fail-closed).
+        try {
+            $key = 'iam:dec:'.$request->cacheKey();
+        } catch (\JsonException) {
+            return $this->inner->decide($request);
+        }
         $cached = $this->cache->get($key);
         if (is_array($cached)) {
             return IamDecision::fromArray($cached);
