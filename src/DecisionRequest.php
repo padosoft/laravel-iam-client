@@ -27,8 +27,7 @@ final readonly class DecisionRequest
     /**
      * Chiave di cache stabile: la decisione dipende da TUTTI gli input (incl. context ABAC e AAL),
      * quindi vanno tutti nella chiave, altrimenti due query diverse condividerebbero un esito.
-     */
-    /**
+     *
      * IAM-23: usa JSON_THROW_ON_ERROR. Il vecchio `(string) json_encode(...)` collassava a "" su un
      * context non serializzabile → la chiave diventava una COSTANTE e un ALLOW cachato per un subject
      * veniva servito a QUALSIASI altro. Su failure lanciamo: il CachingDecider bypassa la cache (mai una

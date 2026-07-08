@@ -191,8 +191,20 @@ final class IamClientServiceProvider extends PackageServiceProvider
     private function stringListConfig(string $key): array
     {
         $value = $this->app->make('config')->get('iam-client.'.$key, []);
+        if (!is_array($value)) {
+            return [];
+        }
 
-        return is_array($value) ? array_values(array_filter($value, 'is_string')) : [];
+        $out = [];
+        foreach ($value as $item) {
+            // Trim + scarta le stringhe vuote: "warehouse, billing" → ['warehouse','billing'] (senza
+            // ' billing' che non matcherebbe mai un prefisso ability). '0' resta valido (confronto esplicito).
+            if (is_string($item) && trim($item) !== '') {
+                $out[] = trim($item);
+            }
+        }
+
+        return $out;
     }
 
     private function intConfig(string $key, int $default): int

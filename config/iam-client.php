@@ -58,7 +58,11 @@ return [
         // IAM-40: se valorizzato, intercetta SOLO le ability il cui prefisso (`app:`) è in questa lista —
         // così un'ability namespaced di terze parti (es. `log:viewer`) non viene rivendicata/negata da IAM.
         // Vuoto = comportamento storico (tutte le namespaced). Es.: ['warehouse', 'billing'].
-        'app_keys' => array_values(array_filter(explode(',', (string) env('IAM_CLIENT_APP_KEYS', '')))),
+        // Trim di ogni voce + scarto solo le stringhe vuote (confronto esplicito così '0' resta valido).
+        'app_keys' => array_values(array_filter(
+            array_map('trim', explode(',', (string) env('IAM_CLIENT_APP_KEYS', ''))),
+            static fn (string $k): bool => $k !== '',
+        )),
     ],
 
     // Nota: il transport è SEMPRE fail-closed (un PDP irraggiungibile nega). Non esiste un opt-out

@@ -126,14 +126,23 @@ final class ClientCredentialsTokenProvider implements TokenProvider
 
     private function currentSecret(): string
     {
-        // IAM-25: il secret ruotato è cifrato in cache; decifra, e su valore illeggibile (APP_KEY ruotata,
-        // riga corrotta) fai fallback al secret di config invece di propagare un errore.
+        // IAM-25: il secret ruotato è cifrato in cache; decifra.
         $stored = $this->cache->get($this->secretKey());
         if (is_string($stored) && $stored !== '') {
             try {
                 return Crypt::decryptString($stored);
             } catch (\Throwable) {
-                // valore non decifrabile → usa il secret di config
+                // Backward-compat: una release precedente cacheva il secret ruotato in CHIARO (forever).
+                // NON scartarlo (regredirebbe a fail-closed durante il rollover, usando un config secret
+                // ormai vecchio): trattalo come legacy-plaintext, ri-cifralo con TTL (migrazione one-time)
+                // e usalo. Se anche la ri-cifratura fallisce, usa comunque il valore legacy.
+                try {
+                    $this->cache->put($this->secretKey(), Crypt::encryptString($stored), self::ROTATED_SECRET_TTL);
+                } catch (\Throwable) {
+                    // best-effort re-encrypt; il valore legacy resta usabile
+                }
+
+                return $stored;
             }
         }
 
