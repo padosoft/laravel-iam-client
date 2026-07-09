@@ -18,6 +18,12 @@ php artisan vendor:publish --tag=laravel-iam-client-config
 | `mode` | `IAM_CLIENT_MODE` | `local` | Transport: `local` = in-process PDP; `http` = remote Admin API. Any value ≠ `http` selects `local`. |
 | `http.base_url` | `IAM_CLIENT_BASE_URL` | — | Versioned API root, e.g. `https://iam.example.com/api/iam/v1`. The client appends `/decisions/check`. |
 | `http.token` | `IAM_CLIENT_TOKEN` | — | Bearer token for the Admin API. Omitted from the request when null. |
+| `http.client_id` | `IAM_CLIENT_ID` | — | client_credentials auth; the SDK obtains/renews the token itself. Precedence over a static `token`. |
+| `http.client_secret` | `IAM_CLIENT_SECRET` | — | The rotatable secret. An auto-rotated secret is cached **encrypted** with a bounded TTL (IAM-25). |
+| `http.private_key` | `IAM_CLIENT_PRIVATE_KEY` | — | private_key_jwt (RFC 7523): ES256 PEM (inline or path). Precedence over `client_secret`. |
+| `http.private_key_kid` | `IAM_CLIENT_PRIVATE_KEY_KID` | — | `kid` of the public key registered in IAM's JWKS. |
+| `http.oauth_url` | `IAM_CLIENT_OAUTH_URL` | — | Token endpoint; derived from `base_url` when unset. |
+| `http.allow_insecure` | `IAM_CLIENT_ALLOW_INSECURE` | `false` | IAM-39: allow credentials over `http://`. Fail-closed by default (non-`https`, except `localhost`, gets no secret). Dev only. |
 | `http.timeout` | — | `5` | Guzzle request timeout (seconds). |
 | `subject_type` | — | `user` | Subject `type` sent in every decision query. |
 | `default_application` | `IAM_CLIENT_APP` | — | Default `application` when a call doesn't pass one. |
@@ -27,6 +33,7 @@ php artisan vendor:publish --tag=laravel-iam-client-config
 | `cache.store` | — | `null` | Laravel cache store name. `null` = default store. |
 | `gate.enabled` | — | `true` | Register the `Gate::before` adapter. |
 | `gate.intercept` | — | `namespaced` | `namespaced` = only abilities with `:`; `all` = every ability. |
+| `gate.app_keys` | `IAM_CLIENT_APP_KEYS` | `[]` (all namespaced) | IAM-40: comma-separated app prefixes; intercept **only** these `app:` namespaces so third-party abilities aren't claimed. Each entry trimmed. |
 
 ## The published file
 
@@ -35,9 +42,15 @@ return [
     'mode' => env('IAM_CLIENT_MODE', 'local'),
 
     'http' => [
-        'base_url' => env('IAM_CLIENT_BASE_URL'),   // e.g. https://iam.example.com/api/iam/v1
-        'token'    => env('IAM_CLIENT_TOKEN'),       // Bearer for the Admin API
-        'timeout'  => 5,
+        'base_url'        => env('IAM_CLIENT_BASE_URL'),   // e.g. https://iam.example.com/api/iam/v1
+        'token'           => env('IAM_CLIENT_TOKEN'),        // static Bearer for the Admin API
+        'client_id'       => env('IAM_CLIENT_ID'),           // client_credentials (self-renewing token)
+        'client_secret'   => env('IAM_CLIENT_SECRET'),       // rotatable; auto-rotated copy cached encrypted (IAM-25)
+        'private_key'     => env('IAM_CLIENT_PRIVATE_KEY'),  // private_key_jwt: ES256 PEM or path
+        'private_key_kid' => env('IAM_CLIENT_PRIVATE_KEY_KID'),
+        'oauth_url'       => env('IAM_CLIENT_OAUTH_URL'),     // else derived from base_url
+        'timeout'         => 5,
+        'allow_insecure'  => (bool) env('IAM_CLIENT_ALLOW_INSECURE', false),  // IAM-39: http:// only in dev
     ],
 
     'subject_type'         => 'user',
@@ -53,6 +66,7 @@ return [
     'gate' => [
         'enabled'   => true,
         'intercept' => 'namespaced',  // or 'all'
+        'app_keys'  => [],            // IAM-40: e.g. ['warehouse','billing']; empty = all namespaced
     ],
 ];
 ```
@@ -81,6 +95,16 @@ IAM_CLIENT_ORG=org_acme
 ::: callout danger "There is no fail_open key"
 The transport is always fail-closed: an unreachable PDP denies. Tolerating an outage is a conscious
 [application choice](/best-practices/fail-closed-design), not a config setting.
+:::
+
+::: callout danger "Use https for credentials (IAM-39)"
+The **client_credentials** token provider (`client_id` + `client_secret`) refuses to send the secret to a
+non-`https` `oauth_url` — except loopback (`localhost` / `127.0.0.1` / `::1`) — returning no token so the PDP
+denies, rather than leaking the secret in clear. `allow_insecure=true` lifts this for local dev only. This
+guard covers the client_credentials token endpoint; for `private_key_jwt` and the static `token` you must set
+`https` on `oauth_url` / `base_url` yourself. The static `token` (and every minted Bearer) is sent to the
+**Admin API** at `base_url` (`/decisions/check`), not to the OAuth token endpoint. An auto-rotated secret is
+additionally cached **encrypted** at rest (IAM-25).
 :::
 
 ::: callout warning "Cache TTL is your revocation latency"

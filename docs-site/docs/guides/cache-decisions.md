@@ -36,11 +36,19 @@ hash('sha256', json_encode([
     subjectType, subjectId, permission,
     organization, application, resource,
     context, currentAal,
-]));
+], JSON_THROW_ON_ERROR));
 ```
 
 Because every input is in the key, two different queries can never collide on one cached answer — change the
 AAL, the resource, or any ABAC fact and you get a different key.
+
+::: callout warning "A non-serializable context can't collide (IAM-23)"
+The `JSON_THROW_ON_ERROR` flag matters: if an ABAC context can't be JSON-encoded, `json_encode` would
+otherwise return `false` and **every** such request would hash to the *same* key — a cross-subject cache
+collision where one subject's ALLOW could be served to another. Instead `cacheKey()` throws, and
+`CachingDecider` catches the `JsonException` and delegates straight to the inner transport (no cache read or
+write) — fail-closed, never a collision.
+:::
 
 ## What is *not* cached
 
