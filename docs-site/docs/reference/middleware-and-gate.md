@@ -95,7 +95,8 @@ ability like `log:viewer` isn't claimed and denied.
 ### Resource from gate arguments
 
 The first element of `$arguments` becomes the `resource`. **IAM-24**: an Eloquent model is keyed to its
-primary key (as `iam.can` does), and a scalar is used verbatim; anything else resolves to no resource:
+primary key (as `iam.can` does), and a scalar is used when its string-cast is **non-empty**; anything else —
+an array, `null`, or a scalar that casts to `''` (e.g. `false`, `''`) — resolves to no resource:
 
 ```php
 $user->can('warehouse:stock.adjust', 'wh_milan');             // resource = 'wh_milan'
@@ -108,7 +109,7 @@ $user->can('reports:view');                                    // no argument �
 flowchart TD
     A["decide(user, ability, arguments)"] --> O{"owns(ability)?"}
     O -->|no| N["return null (local gate decides)"]
-    O -->|yes| C["resource = model ? (string) getKey() : scalar ? (string) arg : none"]
+    O -->|yes| C["resource = model ? (string) getKey() : (scalar & (string) arg !== '') ? (string) arg : none"]
     C --> G["IamClient::check(user, ability, context)->granted()"]
     G --> R["true = allow · false = deny"]
 ```

@@ -86,8 +86,9 @@ $user->can('warehouse:stock.adjust', 'wh_milan');   // scalar → resource 'wh_m
 $user->can('billing:invoices.update', $invoice);      // model  → resource (string) $invoice->getKey()
 ```
 
-If the first argument is not a scalar and not a model (an array, or nothing), no `resource` is sent and the
-check is evaluated without a bound resource.
+If the first argument is not a model and not a non-empty scalar — an array, `null`, or a scalar that casts to
+an empty string (e.g. `false` or `''`) — no `resource` is sent and the check is evaluated without a bound
+resource.
 
 ## Worked example
 

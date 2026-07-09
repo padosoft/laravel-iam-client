@@ -89,15 +89,20 @@ Pick **one** way to authenticate the `http` transport (in order of precedence wh
 
 | Mode | Set | Notes |
 |---|---|---|
-| private_key_jwt | `http.private_key` (+ `http.private_key_kid`) | RFC 7523; asymmetric, no shared secret. Wins over the others. |
+| private_key_jwt | `http.client_id` + `http.private_key` (+ `http.private_key_kid`) | RFC 7523; asymmetric, no shared secret. Selected only when **both** `client_id` and `private_key` are set; wins over the others. |
 | client_credentials | `http.client_id` + `http.client_secret` | The SDK obtains/renews the token itself and self-fetches an auto-rotated secret — zero-downtime rollover. |
-| static token | `http.token` | A service bearer minted out of band. |
+| static token | `http.token` | A service bearer minted out of band. Used when neither of the above pairs is set. |
 
-::: callout warning "Credentials never travel over plain http (IAM-39)"
-The token endpoint must be `https`. A non-`https` URL (except `localhost` / `127.0.0.1` / `::1`) is
-**fail-closed**: the token provider returns no token — so the PDP denies — rather than leaking a
-`client_secret`/bearer in clear. `http.allow_insecure=true` (`IAM_CLIENT_ALLOW_INSECURE`) lifts this for
-local development only; never set it in production.
+::: callout warning "The client_credentials token endpoint is https-guarded (IAM-39)"
+The **client_credentials** token provider refuses to send `client_id`/`client_secret` to a non-`https`
+`oauth_url` (except `localhost` / `127.0.0.1` / `::1`): it returns no token — so the PDP denies — rather than
+leaking the secret in clear. `http.allow_insecure=true` (`IAM_CLIENT_ALLOW_INSECURE`) lifts this for local
+development only.
+
+This guard currently covers the **client_credentials token endpoint only**. The `private_key_jwt` assertion
+and the static-`token` bearer are posted to the URLs you configure *as-is* — so you must set `https` for
+`http.oauth_url` **and** `http.base_url` yourself in production. (The decision call carrying the Bearer always
+goes to `base_url`, in every mode.)
 :::
 
 ::: callout info "Auto-rotated secret is encrypted at rest (IAM-25)"

@@ -19,7 +19,7 @@ A condensed reference. For prose and examples see [Configuration](/operations/co
 | `http.private_key` | `IAM_CLIENT_PRIVATE_KEY` | string\|null | `null` | private_key_jwt (RFC 7523): ES256 PEM (inline or path); takes precedence over `client_secret` |
 | `http.private_key_kid` | `IAM_CLIENT_PRIVATE_KEY_KID` | string\|null | `null` | `kid` of the public key registered in IAM's JWKS |
 | `http.oauth_url` | `IAM_CLIENT_OAUTH_URL` | string\|null | `null` | token endpoint; derived from `base_url` when unset |
-| `http.allow_insecure` | `IAM_CLIENT_ALLOW_INSECURE` | bool | `false` | **IAM-39**: allow credentials over `http://`. Default `false` = fail-closed: a non-`https` token endpoint (except `localhost`) never receives a secret/bearer. Dev only |
+| `http.allow_insecure` | `IAM_CLIENT_ALLOW_INSECURE` | bool | `false` | **IAM-39**: allow the client-credentials secret over `http://`. Default `false` = fail-closed: a non-`https` `oauth_url` (except loopback `localhost`/`127.0.0.1`/`::1`) never receives the `client_secret`. Dev only |
 | `http.timeout` | — | int | `5` | Guzzle timeout, seconds |
 | `subject_type` | — | string | `user` | sent as `subject.type` |
 | `default_application` | `IAM_CLIENT_APP` | string\|null | `null` | default `application` |

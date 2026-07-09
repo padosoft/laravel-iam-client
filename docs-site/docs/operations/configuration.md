@@ -97,11 +97,14 @@ The transport is always fail-closed: an unreachable PDP denies. Tolerating an ou
 [application choice](/best-practices/fail-closed-design), not a config setting.
 :::
 
-::: callout danger "Credentials require https (IAM-39)"
-When authenticating with `client_id`/`client_secret` (or a static bearer to the token endpoint), the URL must
-be `https`. A non-`https` endpoint (except `localhost`) receives **no** credentials and the PDP denies —
-rather than leaking a secret in clear. `allow_insecure=true` lifts this for local dev only. An auto-rotated
-secret is additionally cached **encrypted** at rest (IAM-25).
+::: callout danger "Use https for credentials (IAM-39)"
+The **client_credentials** token provider (`client_id` + `client_secret`) refuses to send the secret to a
+non-`https` `oauth_url` — except loopback (`localhost` / `127.0.0.1` / `::1`) — returning no token so the PDP
+denies, rather than leaking the secret in clear. `allow_insecure=true` lifts this for local dev only. This
+guard covers the client_credentials token endpoint; for `private_key_jwt` and the static `token` you must set
+`https` on `oauth_url` / `base_url` yourself. The static `token` (and every minted Bearer) is sent to the
+**Admin API** at `base_url` (`/decisions/check`), not to the OAuth token endpoint. An auto-rotated secret is
+additionally cached **encrypted** at rest (IAM-25).
 :::
 
 ::: callout warning "Cache TTL is your revocation latency"
