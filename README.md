@@ -111,6 +111,11 @@ IAM_CLIENT_ORG=org_acme
 That's it — the service provider wires the right decider (with caching) and registers the middleware
 aliases and the Gate adapter automatically.
 
+> **Use `https` in production (fail-closed).** Credentials and the Bearer-carrying decision call never travel
+> over plain `http://`: a non-`https` `IAM_CLIENT_BASE_URL`/`IAM_CLIENT_OAUTH_URL` (except loopback —
+> `localhost`/`127.0.0.1`/`::1`) is **denied** rather than sending a secret or token in clear. Set
+> `IAM_CLIENT_ALLOW_INSECURE=true` to lift this for local development only.
+
 #### Authentication modes (choose one)
 
 The SDK authenticates to the PDP in one of three ways (checked in this order of precedence):
