@@ -7,6 +7,7 @@ namespace Padosoft\Iam\Client\Auth;
 use GuzzleHttp\ClientInterface;
 use Illuminate\Contracts\Cache\Repository as Cache;
 use Illuminate\Support\Facades\Crypt;
+use Padosoft\Iam\Client\Support\TransportGuard;
 
 /**
  * Ottiene un access token via **client_credentials** (client_id + client_secret) e lo cacha fino a poco
@@ -34,7 +35,7 @@ final class ClientCredentialsTokenProvider implements TokenProvider
     {
         // IAM-39: non spedire MAI client_secret/bearer su un endpoint non-https. Un URL http:// (salvo
         // localhost o allow-insecure esplicito) è fail-closed → null (il PDP negherà) invece di leak in chiaro.
-        if (!$this->transportAllowed()) {
+        if (!TransportGuard::allows($this->oauthUrl, $this->allowInsecureTransport)) {
             return null;
         }
 
@@ -44,21 +45,6 @@ final class ClientCredentialsTokenProvider implements TokenProvider
         }
 
         return $this->mint();
-    }
-
-    private function transportAllowed(): bool
-    {
-        $scheme = strtolower((string) parse_url($this->oauthUrl, PHP_URL_SCHEME));
-        if ($scheme === 'https') {
-            return true;
-        }
-        if ($scheme === 'http') {
-            $host = strtolower((string) parse_url($this->oauthUrl, PHP_URL_HOST));
-
-            return $this->allowInsecureTransport || in_array($host, ['localhost', '127.0.0.1', '::1'], true);
-        }
-
-        return false; // scheme assente/sconosciuto → fail-closed
     }
 
     private function mint(): ?string
@@ -80,6 +66,7 @@ final class ClientCredentialsTokenProvider implements TokenProvider
                 'auth' => [$this->clientId, $secret], // client_secret_basic
                 'form_params' => ['grant_type' => 'client_credentials'],
                 'http_errors' => false,
+                'allow_redirects' => false, // IAM-39b: mai seguire un 30x https→http (leak del secret)
             ]);
             if ($res->getStatusCode() !== 200) {
                 return null;
@@ -105,6 +92,7 @@ final class ClientCredentialsTokenProvider implements TokenProvider
                 'headers' => ['Accept' => 'application/json'],
                 'auth' => [$this->clientId, $this->currentSecret()],
                 'http_errors' => false,
+                'allow_redirects' => false, // IAM-39b: nessun redirect su una richiesta autenticata col secret
             ]);
             if ($res->getStatusCode() !== 200) {
                 return false;

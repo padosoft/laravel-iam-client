@@ -82,6 +82,7 @@ final class IamClientServiceProvider extends PackageServiceProvider
                 new GuzzleClient(['timeout' => $this->intConfig('http.timeout', 5)]),
                 $this->stringConfig('http.base_url') ?? '',
                 $this->makeTokenProvider($app),
+                $this->boolConfig('http.allow_insecure', false), // IAM-39b: guard the Bearer-carrying decision call
             )
             : new LocalDecider($app->make(AuthorizationEngine::class));
 
@@ -112,6 +113,7 @@ final class IamClientServiceProvider extends PackageServiceProvider
                 $privateKey,
                 $this->stringConfig('http.private_key_kid'),
                 $app->make('cache')->store($this->stringConfig('cache.store')),
+                allowInsecureTransport: $this->boolConfig('http.allow_insecure', false), // IAM-39b
             );
         }
 

@@ -8,6 +8,7 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Padosoft\Iam\Client\Auth\TokenProvider;
+use Padosoft\Iam\Client\Support\TransportGuard;
 
 /**
  * Push a hand-authored manifest file to IAM's Admin API — for apps that do NOT use spatie (the manifest is
@@ -55,6 +56,13 @@ final class ManifestPushCommand extends Command
 
             return self::FAILURE;
         }
+        // IAM-39b: questo push porta il Bearer verso base_url. Fail-closed su http:// (salvo loopback o
+        // allow_insecure): non spedire la credenziale in chiaro nemmeno da CI.
+        if (!TransportGuard::allows($base, (bool) config('iam-client.http.allow_insecure', false))) {
+            $this->error('Refusing to push over an insecure transport: iam-client.http.base_url must be https (IAM-39b).');
+
+            return self::FAILURE;
+        }
         $token = $tokens->resolve();
         if ($token === null) {
             $this->error('Could not obtain a bearer token — check the iam-client auth config.');
@@ -65,6 +73,7 @@ final class ManifestPushCommand extends Command
         $res = Http::acceptJson()
             ->withToken($token)
             ->withHeaders(['Idempotency-Key' => (string) Str::uuid()])
+            ->withoutRedirecting() // IAM-39b: non seguire un 30x https→http (leak del Bearer)
             ->post(rtrim($base, '/').'/applications/'.rawurlencode($app).'/manifests', ['manifest' => $manifest]);
 
         if (!$res->successful()) {
