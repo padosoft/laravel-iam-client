@@ -79,31 +79,36 @@ use Padosoft\Iam\Client\Http\Middleware\IamCan;
 | Hook | `Gate::before` |
 | `decide()` | `(Authenticatable $user, string $ability, array $arguments = []): ?bool` |
 
-### Ownership (`intercept`)
+### Ownership (`intercept` + `app_keys`)
 
-| `intercept` | `owns(ability)` is true when |
+| Config | `owns(ability)` is true when |
 |---|---|
-| `namespaced` *(default)* | the ability contains `:` |
-| `all` | always |
+| `intercept = namespaced` *(default)*, `app_keys = []` | the ability contains `:` |
+| `intercept = namespaced`, `app_keys = ['a','b']` | the ability's prefix before `:` is in `app_keys` (IAM-40) |
+| `intercept = all` | always |
 
 `decide()` returns `null` when the adapter doesn't own the ability (Laravel's local Gates/policies then
-decide), otherwise `IamClient::check($user, $ability, $context)->granted()`.
+decide), otherwise `IamClient::check($user, $ability, $context)->granted()`. Configuring `gate.app_keys`
+(`IAM_CLIENT_APP_KEYS`) fences interception to the app prefixes IAM actually owns, so a third-party namespaced
+ability like `log:viewer` isn't claimed and denied.
 
 ### Resource from gate arguments
 
-The first element of `$arguments` is used as the `resource` **only if it is a non-empty string**:
+The first element of `$arguments` becomes the `resource`. **IAM-24**: an Eloquent model is keyed to its
+primary key (as `iam.can` does), and a scalar is used verbatim; anything else resolves to no resource:
 
 ```php
 $user->can('warehouse:stock.adjust', 'wh_milan');             // resource = 'wh_milan'
-$user->can('billing:invoices.update', $invoice);              // model → NO resource (global)
+$user->can('billing:invoices.update', $invoice);              // model → resource = (string) $invoice->getKey()
 $user->can('billing:invoices.update', (string) $invoice->id); // resource = id
+$user->can('reports:view');                                    // no argument → NO resource (global)
 ```
 
 ```mermaid
 flowchart TD
     A["decide(user, ability, arguments)"] --> O{"owns(ability)?"}
     O -->|no| N["return null (local gate decides)"]
-    O -->|yes| C["context = first arg is non-empty string ? ['resource'=>arg] : []"]
+    O -->|yes| C["resource = model ? (string) getKey() : scalar ? (string) arg : none"]
     C --> G["IamClient::check(user, ability, context)->granted()"]
     G --> R["true = allow · false = deny"]
 ```

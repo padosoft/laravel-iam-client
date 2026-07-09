@@ -57,27 +57,37 @@ With `namespaced`, your local policies keep running for non-namespaced abilities
 `app:permission`-style abilities are centralized — which is exactly what you want during a gradual rollout.
 :::
 
+### Scope to your apps: `app_keys` (IAM-40)
+
+`namespaced` still owns **every** `app:permission` ability — including one from an *unrelated* package (say a
+logging tool's `log:viewer`). IAM doesn't know that permission, so it would deny it and override the local
+Gate. List the app prefixes IAM actually owns to fence this off:
+
+```php
+'gate' => [
+    'intercept' => 'namespaced',
+    'app_keys'  => ['warehouse', 'billing'],   // env: IAM_CLIENT_APP_KEYS=warehouse,billing
+],
+```
+
+Now the adapter owns `warehouse:*` and `billing:*` and returns `null` for any other namespaced ability, so
+`log:viewer` falls through to the local Gate. Empty `app_keys` (the default) keeps the historic behavior:
+all namespaced abilities are IAM's.
+
 ## Passing a resource
 
-When you pass a **string** first argument to the gate, the adapter forwards it as the decision's `resource`:
+The first gate argument becomes the decision's `resource`. **IAM-24**: the adapter resolves both a scalar and
+an **Eloquent model** — a model is keyed to `(string) $model->getKey()`, exactly as the
+[`iam.can` middleware](/guides/protect-routes) does, so a per-resource check on the Gate path is never
+silently widened into a global one:
 
 ```php
-// 'wh_milan' becomes the ReBAC resource reference
-$user->can('warehouse:stock.adjust', 'wh_milan');
+$user->can('warehouse:stock.adjust', 'wh_milan');   // scalar → resource 'wh_milan'
+$user->can('billing:invoices.update', $invoice);      // model  → resource (string) $invoice->getKey()
 ```
 
-If the first argument is not a non-empty string (e.g. an Eloquent model, an array, or nothing), no `resource`
-is sent and the check is evaluated without a bound resource.
-
-::: callout warning "Models aren't auto-keyed in the Gate path"
-Unlike the [`iam.can` middleware](/guides/protect-routes) — which extracts a model's primary key — the Gate
-adapter only uses a **string** first argument as the resource. If you want a model's id to scope the
-decision, pass it explicitly:
-
-```php
-$user->can('billing:invoices.update', (string) $invoice->getKey());
-```
-:::
+If the first argument is not a scalar and not a model (an array, or nothing), no `resource` is sent and the
+check is evaluated without a bound resource.
 
 ## Worked example
 
@@ -85,7 +95,8 @@ $user->can('billing:invoices.update', (string) $invoice->getKey());
 // A controller — no IAM-specific code, just Laravel's authorize()
 public function destroy(Invoice $invoice)
 {
-    $this->authorize('billing:invoices.delete', (string) $invoice->getKey());
+    // The model is keyed to its id automatically (IAM-24); passing (string) $invoice->getKey() also works.
+    $this->authorize('billing:invoices.delete', $invoice);
     $invoice->delete();
 
     return back();
@@ -104,10 +115,12 @@ with your local policy.
 
 ## Gotchas
 
-::: callout danger "Don't rely on the Gate path for per-model scoping by default"
-A bare `$user->can('billing:invoices.update', $invoice)` sends **no** resource (the model isn't a string), so
-the PDP evaluates the permission globally. Pass `(string) $invoice->getKey()`, or enforce via
-`iam.can:billing:invoices.update,invoice` at the route, where the key is extracted for you.
+::: callout warning "The resource is the model's primary key"
+`$user->can('billing:invoices.update', $invoice)` scopes the decision to `(string) $invoice->getKey()`. If
+your ReBAC tuples key the resource by something other than the primary key (a slug, a UUID column), pass that
+value explicitly as a string instead of the model. A non-scalar key (or a non-scalar, non-model argument)
+resolves to **no** resource, so the permission is evaluated globally — pass an explicit string when you need
+per-resource scoping in that case.
 :::
 
 ## See also

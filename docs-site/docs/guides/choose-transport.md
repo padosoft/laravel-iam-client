@@ -83,6 +83,29 @@ appends `/decisions/check` to it. The server wraps responses in `{ "data": {...}
 unwraps transparently.
 :::
 
+### Authenticating to the server
+
+Pick **one** way to authenticate the `http` transport (in order of precedence when several are set):
+
+| Mode | Set | Notes |
+|---|---|---|
+| private_key_jwt | `http.private_key` (+ `http.private_key_kid`) | RFC 7523; asymmetric, no shared secret. Wins over the others. |
+| client_credentials | `http.client_id` + `http.client_secret` | The SDK obtains/renews the token itself and self-fetches an auto-rotated secret — zero-downtime rollover. |
+| static token | `http.token` | A service bearer minted out of band. |
+
+::: callout warning "Credentials never travel over plain http (IAM-39)"
+The token endpoint must be `https`. A non-`https` URL (except `localhost` / `127.0.0.1` / `::1`) is
+**fail-closed**: the token provider returns no token — so the PDP denies — rather than leaking a
+`client_secret`/bearer in clear. `http.allow_insecure=true` (`IAM_CLIENT_ALLOW_INSECURE`) lifts this for
+local development only; never set it in production.
+:::
+
+::: callout info "Auto-rotated secret is encrypted at rest (IAM-25)"
+When the server rotates the secret, the SDK self-fetches it and caches it **encrypted** (`Crypt` / `APP_KEY`)
+with a bounded TTL — never in clear, never `forever` — so the cache can't become a recoverable copy of a live
+credential. A secret cached in clear by an older release is transparently re-encrypted on first use.
+:::
+
 ## Switching monolith → services
 
 Because the application code never references a transport, extracting the IAM server into its own service is
