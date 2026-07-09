@@ -56,6 +56,10 @@ final class HttpDecider implements Decider
                 ]),
                 'json' => $request->toArray(),
                 'http_errors' => false,
+                // IAM-39b: NON seguire redirect su una richiesta che porta il Bearer. Un 30x https→http
+                // ricocherebbe il body (col token) in chiaro, aggirando la guardia sopra. Un 3xx qui è
+                // anomalo → trattalo come non-2xx (deny), mai come downgrade da inseguire.
+                'allow_redirects' => false,
             ]);
 
             $status = $response->getStatusCode();

@@ -103,10 +103,12 @@ The guard covers **every** credential-bearing path (`TransportGuard`):
 - the **client_credentials** token endpoint (`oauth_url`) — no `client_secret` over http;
 - the **private_key_jwt** token endpoint (`oauth_url`) — no signed assertion over http;
 - the **decision call** to `base_url` — which carries the Bearer in *every* mode, including the static
-  `token` — so `HttpDecider` returns `deny("insecure transport")` before sending.
+  `token` — so `HttpDecider` returns `deny("insecure transport")` before sending;
+- the **`iam:manifest:push`** command — which posts to `base_url` with the Bearer.
 
-So both `http.oauth_url` **and** `http.base_url` must be `https` in production (or loopback / `allow_insecure`
-in dev).
+Redirects are disabled on all of these requests, so a `30x` `https→http` downgrade can't replay the body
+(secret / assertion / Bearer) over cleartext. So both `http.oauth_url` **and** `http.base_url` must be `https`
+in production (or loopback / `allow_insecure` in dev).
 :::
 
 ::: callout info "Auto-rotated secret is encrypted at rest (IAM-25)"

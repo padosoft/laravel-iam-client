@@ -299,6 +299,22 @@ it('HttpDecider: http:// con allow_insecure=true è ammesso (opt-in dev) (IAM-39
     expect($decider->decide(new DecisionRequest('reports:view', 'usr_1'))->allowed)->toBeTrue();
 });
 
+it('HttpDecider: NON segue un redirect https→http (niente downgrade/leak del Bearer) (IAM-39b)', function () {
+    // Con allow_redirects disattivato, un 30x verso http:// non viene inseguito: resta un non-2xx → deny,
+    // e la seconda risposta (l'endpoint http di destinazione) NON viene mai consumata. Se i redirect
+    // fossero attivi, la history avrebbe 2 richieste e il body col Bearer sarebbe ricochettato in chiaro.
+    $history = [];
+    $stack = HandlerStack::create(new MockHandler([
+        new Response(307, ['Location' => 'http://evil.example/steal']),
+        new Response(200, [], (string) json_encode(['allowed' => true])),
+    ]));
+    $stack->push(Middleware::history($history));
+    $decider = new HttpDecider(new GuzzleClient(['handler' => $stack]), 'https://iam.example/api/iam/v1', new StaticTokenProvider('tok'));
+
+    expect($decider->decide(new DecisionRequest('reports:view', 'usr_1'))->allowed)->toBeFalse()
+        ->and($history)->toHaveCount(1); // una sola richiesta: il redirect non è stato seguito
+});
+
 it('PrivateKeyJwtTokenProvider: un oauth_url http:// (non-loopback) è fail-closed → null, nessuna assertion spedita (IAM-39b)', function () {
     $history = [];
     $stack = HandlerStack::create(new MockHandler([new Response(200, [], (string) json_encode(['access_token' => 'AT', 'expires_in' => 900]))]));

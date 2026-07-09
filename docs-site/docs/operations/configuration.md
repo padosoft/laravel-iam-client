@@ -98,13 +98,14 @@ The transport is always fail-closed: an unreachable PDP denies. Tolerating an ou
 :::
 
 ::: callout danger "Use https — credentials are fail-closed on http (IAM-39 / IAM-39b)"
-No credential travels over plain `http://`. The guard (`TransportGuard`) covers **every** path: the
-`client_credentials` and `private_key_jwt` token endpoints (`oauth_url`), and the **decision call** to
-`base_url` — which carries the Bearer in every mode, including the static `token` — so `HttpDecider` denies
-before sending. A non-`https` URL (except loopback `localhost` / `127.0.0.1` / `::1`) yields no token / a
-`deny`, rather than leaking a secret or Bearer in clear. `allow_insecure=true` lifts this for local dev only,
-so set **both** `oauth_url` and `base_url` to `https` in production. An auto-rotated secret is additionally
-cached **encrypted** at rest (IAM-25).
+No credential travels over plain `http://`. The guard (`TransportGuard`) covers **every** credential-bearing
+path: the `client_credentials` and `private_key_jwt` token endpoints (`oauth_url`), the **decision call** to
+`base_url` (which carries the Bearer in every mode, including the static `token`), and the
+`iam:manifest:push` command. A non-`https` URL (except loopback `localhost` / `127.0.0.1` / `::1`) yields no
+token / a `deny`, never a leak. Redirects are also disabled on these requests, so a `30x` `https→http`
+downgrade can't replay the body over cleartext. `http.allow_insecure=true` (`IAM_CLIENT_ALLOW_INSECURE`)
+lifts this for local dev only — so set **both** `oauth_url` and `base_url` to `https` in production. An
+auto-rotated secret is additionally cached **encrypted** at rest (IAM-25).
 :::
 
 ::: callout warning "Cache TTL is your revocation latency"

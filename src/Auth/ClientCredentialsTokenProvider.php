@@ -66,6 +66,7 @@ final class ClientCredentialsTokenProvider implements TokenProvider
                 'auth' => [$this->clientId, $secret], // client_secret_basic
                 'form_params' => ['grant_type' => 'client_credentials'],
                 'http_errors' => false,
+                'allow_redirects' => false, // IAM-39b: mai seguire un 30x https→http (leak del secret)
             ]);
             if ($res->getStatusCode() !== 200) {
                 return null;
@@ -91,6 +92,7 @@ final class ClientCredentialsTokenProvider implements TokenProvider
                 'headers' => ['Accept' => 'application/json'],
                 'auth' => [$this->clientId, $this->currentSecret()],
                 'http_errors' => false,
+                'allow_redirects' => false, // IAM-39b: nessun redirect su una richiesta autenticata col secret
             ]);
             if ($res->getStatusCode() !== 200) {
                 return false;

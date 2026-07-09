@@ -65,6 +65,8 @@ final class PrivateKeyJwtTokenProvider implements TokenProvider
                 'client_assertion' => $this->buildAssertion(),
             ],
             'http_errors' => false,
+            // IAM-39b: mai seguire un 30x https→http, che ricocherebbe l'assertion firmata in chiaro.
+            'allow_redirects' => false,
         ]);
         if ($res->getStatusCode() !== 200) {
             return null;
