@@ -97,14 +97,14 @@ The transport is always fail-closed: an unreachable PDP denies. Tolerating an ou
 [application choice](/best-practices/fail-closed-design), not a config setting.
 :::
 
-::: callout danger "Use https for credentials (IAM-39)"
-The **client_credentials** token provider (`client_id` + `client_secret`) refuses to send the secret to a
-non-`https` `oauth_url` — except loopback (`localhost` / `127.0.0.1` / `::1`) — returning no token so the PDP
-denies, rather than leaking the secret in clear. `allow_insecure=true` lifts this for local dev only. This
-guard covers the client_credentials token endpoint; for `private_key_jwt` and the static `token` you must set
-`https` on `oauth_url` / `base_url` yourself. The static `token` (and every minted Bearer) is sent to the
-**Admin API** at `base_url` (`/decisions/check`), not to the OAuth token endpoint. An auto-rotated secret is
-additionally cached **encrypted** at rest (IAM-25).
+::: callout danger "Use https — credentials are fail-closed on http (IAM-39 / IAM-39b)"
+No credential travels over plain `http://`. The guard (`TransportGuard`) covers **every** path: the
+`client_credentials` and `private_key_jwt` token endpoints (`oauth_url`), and the **decision call** to
+`base_url` — which carries the Bearer in every mode, including the static `token` — so `HttpDecider` denies
+before sending. A non-`https` URL (except loopback `localhost` / `127.0.0.1` / `::1`) yields no token / a
+`deny`, rather than leaking a secret or Bearer in clear. `allow_insecure=true` lifts this for local dev only,
+so set **both** `oauth_url` and `base_url` to `https` in production. An auto-rotated secret is additionally
+cached **encrypted** at rest (IAM-25).
 :::
 
 ::: callout warning "Cache TTL is your revocation latency"

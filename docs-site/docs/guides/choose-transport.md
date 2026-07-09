@@ -93,16 +93,20 @@ Pick **one** way to authenticate the `http` transport (in order of precedence wh
 | client_credentials | `http.client_id` + `http.client_secret` | The SDK obtains/renews the token itself and self-fetches an auto-rotated secret — zero-downtime rollover. |
 | static token | `http.token` | A service bearer minted out of band. Used when neither of the above pairs is set. |
 
-::: callout warning "The client_credentials token endpoint is https-guarded (IAM-39)"
-The **client_credentials** token provider refuses to send `client_id`/`client_secret` to a non-`https`
-`oauth_url` (except `localhost` / `127.0.0.1` / `::1`): it returns no token — so the PDP denies — rather than
-leaking the secret in clear. `http.allow_insecure=true` (`IAM_CLIENT_ALLOW_INSECURE`) lifts this for local
-development only.
+::: callout warning "Credentials are https-guarded, fail-closed (IAM-39 / IAM-39b)"
+No credential travels over plain `http://`. A non-`https` URL — except loopback (`localhost` / `127.0.0.1` /
+`::1`) — is **fail-closed**: nothing is sent and the PDP denies, rather than leaking a secret or Bearer in
+clear. `http.allow_insecure=true` (`IAM_CLIENT_ALLOW_INSECURE`) lifts this for local development only.
 
-This guard currently covers the **client_credentials token endpoint only**. The `private_key_jwt` assertion
-and the static-`token` bearer are posted to the URLs you configure *as-is* — so you must set `https` for
-`http.oauth_url` **and** `http.base_url` yourself in production. (The decision call carrying the Bearer always
-goes to `base_url`, in every mode.)
+The guard covers **every** credential-bearing path (`TransportGuard`):
+
+- the **client_credentials** token endpoint (`oauth_url`) — no `client_secret` over http;
+- the **private_key_jwt** token endpoint (`oauth_url`) — no signed assertion over http;
+- the **decision call** to `base_url` — which carries the Bearer in *every* mode, including the static
+  `token` — so `HttpDecider` returns `deny("insecure transport")` before sending.
+
+So both `http.oauth_url` **and** `http.base_url` must be `https` in production (or loopback / `allow_insecure`
+in dev).
 :::
 
 ::: callout info "Auto-rotated secret is encrypted at rest (IAM-25)"

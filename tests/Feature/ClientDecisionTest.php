@@ -272,3 +272,40 @@ it('PrivateKeyJwtTokenProvider: firma un assertion ES256 e ottiene il token (nes
         ->and(substr_count((string) $params['client_assertion'], '.'))->toBe(2)
         ->and($params)->not->toHaveKey('client_secret');
 });
+
+it('HttpDecider: un base_url http:// (non-loopback) è fail-closed → deny SENZA spedire il Bearer (IAM-39b)', function () {
+    // La decision call porta il Bearer verso base_url: su http:// non-loopback si nega PRIMA di chiamare,
+    // così il token non viaggia mai in chiaro. La history resta vuota (nessuna richiesta partita).
+    $history = [];
+    $stack = HandlerStack::create(new MockHandler([new Response(200, [], (string) json_encode(['allowed' => true]))]));
+    $stack->push(Middleware::history($history));
+    $decider = new HttpDecider(new GuzzleClient(['handler' => $stack]), 'http://iam.example/api/iam/v1', new StaticTokenProvider('tok'));
+
+    expect($decider->decide(new DecisionRequest('reports:view', 'usr_1'))->allowed)->toBeFalse()
+        ->and($history)->toBeEmpty(); // guardia scattata: nessuna richiesta HTTP
+});
+
+it('HttpDecider: http://localhost è ammesso (dev loopback) — la decisione parte (IAM-39b)', function () {
+    $mock = new MockHandler([new Response(200, [], (string) json_encode(['allowed' => true, 'decision_id' => 'dec_lo']))]);
+    $decider = new HttpDecider(new GuzzleClient(['handler' => HandlerStack::create($mock)]), 'http://localhost:8080/api/iam/v1', new StaticTokenProvider('tok'));
+
+    expect($decider->decide(new DecisionRequest('reports:view', 'usr_1'))->allowed)->toBeTrue();
+});
+
+it('HttpDecider: http:// con allow_insecure=true è ammesso (opt-in dev) (IAM-39b)', function () {
+    $mock = new MockHandler([new Response(200, [], (string) json_encode(['allowed' => true, 'decision_id' => 'dec_ins']))]);
+    $decider = new HttpDecider(new GuzzleClient(['handler' => HandlerStack::create($mock)]), 'http://iam.example/api/iam/v1', new StaticTokenProvider('tok'), true);
+
+    expect($decider->decide(new DecisionRequest('reports:view', 'usr_1'))->allowed)->toBeTrue();
+});
+
+it('PrivateKeyJwtTokenProvider: un oauth_url http:// (non-loopback) è fail-closed → null, nessuna assertion spedita (IAM-39b)', function () {
+    $history = [];
+    $stack = HandlerStack::create(new MockHandler([new Response(200, [], (string) json_encode(['access_token' => 'AT', 'expires_in' => 900]))]));
+    $stack->push(Middleware::history($history));
+    // PEM fittizio: la guardia nega PRIMA di firmare/spedire, quindi non serve una chiave valida.
+    $p = new PrivateKeyJwtTokenProvider(new GuzzleClient(['handler' => $stack]), 'http://iam.example/oauth', 'cli_pk', 'dummy-pem', 'k1', new CacheRepository(new ArrayStore));
+
+    expect($p->resolve())->toBeNull()
+        ->and($history)->toBeEmpty();
+});

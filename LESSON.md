@@ -62,3 +62,8 @@
   Le query `explain` non si cachano (spiegazione fresca, non condivisibile tra contesti).
 - **Mai loggare il Bearer dell'Admin API né il body di errore.** Gli errori di transport riportano
   `$e::class`, non il messaggio (che potrebbe contenere token/PII).
+- **La guardia di trasporto è UNA sola, non per-percorso (IAM-39b).** Il primo fix IAM-39 guardava solo il
+  token endpoint del client_credentials, ma il Bearer viaggia verso `base_url` in OGNI modo (anche col token
+  statico) e l'assertion private_key_jwt verso `oauth_url`: erano buchi. Centralizza in `TransportGuard::allows`
+  e chiamalo su `HttpDecider` (decision call → `deny("insecure transport")`), `PrivateKeyJwtTokenProvider` e
+  `ClientCredentialsTokenProvider`. `https` sempre, `http` solo loopback o `allow_insecure`; scheme assente → nega.

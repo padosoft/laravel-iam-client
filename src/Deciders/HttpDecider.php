@@ -10,6 +10,7 @@ use Padosoft\Iam\Client\Auth\TokenProvider;
 use Padosoft\Iam\Client\Contracts\Decider;
 use Padosoft\Iam\Client\DecisionRequest;
 use Padosoft\Iam\Client\IamDecision;
+use Padosoft\Iam\Client\Support\TransportGuard;
 
 /**
  * Trasporto remoto (doc 06): l'app consumer interroga l'Admin API del server IAM
@@ -25,17 +26,27 @@ final class HttpDecider implements Decider
     /**
      * @param  TokenProvider|string|null  $tokens  A TokenProvider, or — for backward compatibility — a raw
      *                                             static bearer token (or null for none), wrapped transparently.
+     * @param  bool  $allowInsecure  IAM-39b: consenti la decision call (che porta il Bearer) su `http://`.
+     *                               Default false = fail-closed: un `base_url` non-https (salvo loopback)
+     *                               nega invece di spedire il token in chiaro.
      */
     public function __construct(
         private readonly ClientInterface $http,
         private readonly string $baseUrl,
         TokenProvider|string|null $tokens,
+        private readonly bool $allowInsecure = false,
     ) {
         $this->tokens = $tokens instanceof TokenProvider ? $tokens : new StaticTokenProvider($tokens);
     }
 
     public function decide(DecisionRequest $request): IamDecision
     {
+        // IAM-39b: la decision call trasporta il Bearer verso `base_url`. Se non è https (salvo loopback o
+        // allow_insecure), NON spedire in chiaro: nega (fail-closed) invece di leakare la credenziale.
+        if (!TransportGuard::allows($this->baseUrl, $this->allowInsecure)) {
+            return IamDecision::deny('insecure transport');
+        }
+
         try {
             $token = $this->tokens->resolve();
             $response = $this->http->request('POST', rtrim($this->baseUrl, '/').'/decisions/check', [

@@ -11,6 +11,7 @@ use Lcobucci\JWT\Encoding\JoseEncoder;
 use Lcobucci\JWT\Signer\Ecdsa\Sha256;
 use Lcobucci\JWT\Signer\Key\InMemory;
 use Lcobucci\JWT\Token\Builder;
+use Padosoft\Iam\Client\Support\TransportGuard;
 
 /**
  * private_key_jwt (RFC 7523): authenticate to the token endpoint with a SIGNED ASSERTION instead of a shared
@@ -30,10 +31,18 @@ final class PrivateKeyJwtTokenProvider implements TokenProvider
         private readonly Cache $cache,
         private readonly int $skew = 30,           // rinnova il token N secondi prima della scadenza
         private readonly int $assertionTtl = 60,   // vita dell'assertion (breve; il server la limita)
+        private readonly bool $allowInsecureTransport = false, // IAM-39b: http:// solo dev/loopback
     ) {}
 
     public function resolve(): ?string
     {
+        // IAM-39b: l'assertion firmata viene POSTata a `oauth_url`. Se non è https (salvo loopback o
+        // allow_insecure), non spedirla in chiaro → null (nessun Bearer → il PDP nega), come per il
+        // client_secret. Fail-closed anche sul token in cache: un endpoint insicuro non serve credenziali.
+        if (!TransportGuard::allows($this->oauthUrl, $this->allowInsecureTransport)) {
+            return null;
+        }
+
         $cached = $this->cache->get($this->tokenKey());
         if (is_string($cached) && $cached !== '') {
             return $cached;
