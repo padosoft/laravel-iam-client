@@ -9,6 +9,7 @@ use Illuminate\Contracts\Auth\Access\Gate;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Routing\Router;
 use Padosoft\Iam\Client\Auth\ClientCredentialsTokenProvider;
+use Padosoft\Iam\Client\Auth\DelegatedTokenVerifier;
 use Padosoft\Iam\Client\Auth\PrivateKeyJwtTokenProvider;
 use Padosoft\Iam\Client\Auth\StaticTokenProvider;
 use Padosoft\Iam\Client\Auth\TokenProvider;
@@ -20,7 +21,10 @@ use Padosoft\Iam\Client\Deciders\LocalDecider;
 use Padosoft\Iam\Client\Gate\IamGateAdapter;
 use Padosoft\Iam\Client\Http\Middleware\IamAuthenticate;
 use Padosoft\Iam\Client\Http\Middleware\IamCan;
+use Padosoft\Iam\Client\Http\Middleware\IamCanDelegated;
+use Padosoft\Iam\Client\Support\DelegatedBearerInspector;
 use Padosoft\Iam\Contracts\Authorization\AuthorizationEngine;
+use Padosoft\Iam\Contracts\Delegation\DelegatedAuthorizationEngine;
 use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
 
@@ -53,6 +57,40 @@ final class IamClientServiceProvider extends PackageServiceProvider
             $this->stringConfig('gate.intercept') ?? 'namespaced',
             $this->stringListConfig('gate.app_keys'), // IAM-40: intercetta solo questi prefissi app (vuoto = tutte le namespaced)
         ));
+
+        // Token delegati (claim act): introspection-mandatory. L'URL deriva da http.oauth_url
+        // (o da base_url, sostituendo il prefix Admin API con /oauth). Fail-closed: senza URL
+        // introspection il verifier nega — un token delegato non si autorizza mai dal parse locale.
+        $this->app->singleton(DelegatedTokenVerifier::class, fn (Application $app): DelegatedTokenVerifier => new DelegatedTokenVerifier(
+            new GuzzleClient(['timeout' => $this->intConfig('http.timeout', 5)]),
+            new DelegatedBearerInspector,
+            $this->introspectionUrl(),
+            $this->stringConfig('http.client_id'),
+            $this->stringConfig('http.client_secret'),
+            $this->boolConfig('http.allow_insecure', false),
+        ));
+    }
+
+    /** URL dell'introspection: oauth_url esplicito, altrimenti derivato da base_url. */
+    private function introspectionUrl(): string
+    {
+        $oauth = $this->stringConfig('http.oauth_url');
+        if ($oauth !== null) {
+            return rtrim($oauth, '/').'/introspect';
+        }
+        $base = $this->stringConfig('http.base_url');
+        if ($base === null) {
+            return '';
+        }
+
+        // base_url tipico: https://iam.example.com/api/iam/v1 → https://iam.example.com/oauth
+        $parts = parse_url($base);
+        if (!is_array($parts) || !isset($parts['scheme'], $parts['host'])) {
+            return '';
+        }
+        $origin = $parts['scheme'].'://'.$parts['host'].(isset($parts['port']) ? ':'.$parts['port'] : '');
+
+        return $origin.'/oauth/introspect';
     }
 
     public function packageBooted(): void
@@ -69,6 +107,10 @@ final class IamClientServiceProvider extends PackageServiceProvider
         if (!array_key_exists('iam.auth', $existing)) {
             $router->aliasMiddleware('iam.auth', IamAuthenticate::class);
         }
+        // PEP per rotte ad audience delegata (token con claim act): introspection + intersezione.
+        if (!array_key_exists('iam.can.delegated', $existing)) {
+            $router->aliasMiddleware('iam.can.delegated', IamCanDelegated::class);
+        }
 
         if ($this->boolConfig('gate.enabled', true)) {
             $this->app->make(IamGateAdapter::class)->register($this->app->make(Gate::class));
@@ -84,7 +126,13 @@ final class IamClientServiceProvider extends PackageServiceProvider
                 $this->makeTokenProvider($app),
                 $this->boolConfig('http.allow_insecure', false), // IAM-39b: guard the Bearer-carrying decision call
             )
-            : new LocalDecider($app->make(AuthorizationEngine::class));
+            : new LocalDecider(
+                $app->make(AuthorizationEngine::class),
+                // Il PDP delegato esiste solo con il modulo -agents installato (same-app):
+                // assente ⇒ null ⇒ le richieste delegate NEGANO (fail-closed), mai un
+                // check single-subject implicito.
+                $app->bound(DelegatedAuthorizationEngine::class) ? $app->make(DelegatedAuthorizationEngine::class) : null,
+            );
 
         if (!$this->boolConfig('cache.enabled', true)) {
             return $base;

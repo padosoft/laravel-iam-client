@@ -6,6 +6,7 @@ namespace Tests;
 
 use Illuminate\Foundation\Application;
 use Orchestra\Testbench\TestCase as Orchestra;
+use Padosoft\Iam\Agents\IamAgentsServiceProvider;
 use Padosoft\Iam\Client\IamClientServiceProvider;
 use Padosoft\Iam\IamServiceProvider;
 
@@ -22,6 +23,9 @@ abstract class TestCase extends Orchestra
     {
         return [
             IamServiceProvider::class,
+            // Modulo agents (dev dep): abilita i test delle decisioni DELEGATE in mode=local
+            // (stesso deployment same-app del monorepo).
+            IamAgentsServiceProvider::class,
             IamClientServiceProvider::class,
         ];
     }

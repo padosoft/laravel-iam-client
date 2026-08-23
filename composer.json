@@ -11,12 +11,13 @@
         "guzzlehttp/guzzle": "^7.0"
     },
     "require-dev": {
-        "orchestra/testbench": "^10.0|^11.0",
-        "pestphp/pest": "^3.0",
-        "pestphp/pest-plugin-laravel": "^3.0",
         "larastan/larastan": "^3.0",
         "laravel/pint": "^1.18",
-        "padosoft/laravel-iam-server": "^1.0"
+        "orchestra/testbench": "^10.0|^11.0",
+        "padosoft/laravel-iam-agents": "*",
+        "padosoft/laravel-iam-server": "^1.0",
+        "pestphp/pest": "^3.0",
+        "pestphp/pest-plugin-laravel": "^3.0"
     },
     "autoload": {
         "psr-4": {

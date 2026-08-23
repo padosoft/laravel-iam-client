@@ -25,7 +25,10 @@ final class CachingDecider implements Decider
 
     public function decide(DecisionRequest $request): IamDecision
     {
-        if (!$this->enabled || $this->ttl <= 0 || $request->explain) {
+        // Le decisioni DELEGATE non si cachano MAI: la revoca di una grant deve mordere
+        // al check successivo, non "entro il TTL della cache" (i volumi agent giustificano
+        // la chiamata fresca; la verità resta server-side).
+        if (!$this->enabled || $this->ttl <= 0 || $request->explain || $request->isDelegated()) {
             return $this->inner->decide($request);
         }
 
