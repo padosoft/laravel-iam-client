@@ -133,7 +133,8 @@ kill-switch actually working. Plain user decisions keep their short-TTL cache, u
 
 ## See also
 
-- [`laravel-iam-agents`](https://github.com/padosoft/laravel-iam-agents) — the server module: agent
-  registry, token exchange, delegation grants, PSD2-grade consent, delegation audit stream.
+- [`laravel-iam-agents` docs](https://doc.laravel-iam-agents.padosoft.com) — the server module's own
+  site: glossary, the intersection rule, token lifecycle, consent verifiers, threat model, and every
+  RFC 8693 error explained ([repo](https://github.com/padosoft/laravel-iam-agents)).
 - [Cache decisions](/guides/cache-decisions) — why normal decisions cache and delegated ones don't.
 - [Fail-closed authorization](/concepts/fail-closed) — the posture every piece above inherits.
