@@ -64,6 +64,10 @@ Swap a single env var to move from a modular monolith to a distributed deploymen
   let a low-AAL session through.
 - **`Iam` facade** — `Iam::can($user, 'warehouse:stock.adjust', ['amount' => 300])` for ABAC checks with
   context.
+- **Delegated access (AI agents), act-aware** — verify RFC 8693 delegated tokens (`sub` = user, `act` =
+  agent) via mandatory introspection, decide with `Iam::checkDelegated()` / the `iam.can.delegated`
+  middleware, and never cache a delegated decision: effective authority is always the fresh strict
+  intersection user ∩ agent, revocation included.
 
 ## Use cases
 
@@ -219,6 +223,35 @@ It submits to IAM's Admin API (authenticated with this client's own bearer — t
 console and the removed role/permission is **deprecated** (kept for history, disabled), never deleted. Run it
 in CI on deploy for hands-off sync. See
 [Keeping IAM in sync](https://doc.laravel-iam-server.padosoft.com/guides/keeping-in-sync).
+
+## Delegated access: when an AI agent acts for a user
+
+With the [`laravel-iam-agents`](https://github.com/padosoft/laravel-iam-agents) module on the server, an
+agent never receives a user's token: it **exchanges** it (OAuth 2.0 Token Exchange, RFC 8693) for a
+short-lived delegated token carrying BOTH identities — `sub` = the user, `act` = the agent. This client is
+the enforcement half:
+
+```php
+// Inbound: recognize + verify a delegated bearer (introspection-mandatory —
+// the authoritative view comes from the server, which also checks the session).
+$inspector = app(\Padosoft\Iam\Client\Support\DelegatedBearerInspector::class);
+$verifier  = app(\Padosoft\Iam\Client\Auth\DelegatedTokenVerifier::class);
+
+// Decide: BOTH the user and the agent must be allowed — strict intersection, fail-closed.
+$decision = Iam::checkDelegated(
+    $user,
+    ['agent:01J8XKQ0V2'],                                 // the act chain, outermost first
+    'orders:read',
+    ['delegation_grant_id' => 'dgr_01J9…'],               // pds_dgr claim: revoked grant ⇒ deny, immediately
+);
+
+// Or on a route:
+Route::get('/orders', ListOrders::class)->middleware('iam.can.delegated:orders:read');
+```
+
+Three properties are non-negotiable and built in: a **malformed delegated token throws** (it never degrades
+to a single-subject check), **delegated decisions are never cached** (revocation freshness beats the extra
+round-trip), and the `typ: delegated+jwt` header is hygiene — the defence is server-side introspection.
 
 ## How it fits the ecosystem
 
