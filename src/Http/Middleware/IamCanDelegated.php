@@ -6,6 +6,7 @@ namespace Padosoft\Iam\Client\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Context;
 use Padosoft\Iam\Client\Auth\DelegatedTokenVerifier;
 use Padosoft\Iam\Client\IamClient;
 use Symfony\Component\HttpFoundation\Response;
@@ -48,12 +49,20 @@ final class IamCanDelegated
         }
 
         // Contesto per il downstream (controller/log): chi agisce, per conto di chi.
-        $request->attributes->set('iam_delegation', [
+        $delegationContext = [
             'sub' => $delegation->sub,
             'actors' => $delegation->actors,
             'grant_id' => $delegation->grantId,
             'scopes' => $delegation->scopes,
-        ]);
+        ];
+        $request->attributes->set('iam_delegation', $delegationContext);
+
+        // Laravel Context: OGNI log emesso da questa request — e ogni job che accoda
+        // (Context si deidrata/reidrata da solo nei queued jobs) — porta sub + catena
+        // act + grant id, senza che i singoli pacchetti conoscano la delega. È la
+        // chiave di join cross-package delle query di audit ("tutto ciò che l'agente X
+        // ha fatto, per conto di chiunque").
+        Context::add('iam_delegation', $delegationContext);
 
         return $next($request);
     }
