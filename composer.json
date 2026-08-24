@@ -10,6 +10,9 @@
         "lcobucci/jwt": "^5.0",
         "guzzlehttp/guzzle": "^7.0"
     },
+    "repositories": [
+        { "type": "git", "url": "https://github.com/padosoft/laravel-iam-agents.git" }
+    ],
     "require-dev": {
         "larastan/larastan": "^3.0",
         "laravel/pint": "^1.18",
