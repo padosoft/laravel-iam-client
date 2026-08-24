@@ -50,7 +50,8 @@
         { "title": "Choose a transport", "path": "/guides/choose-transport" },
         { "title": "Per-resource (ReBAC) checks", "path": "/guides/rebac-resource-checks" },
         { "title": "Handle step-up assurance", "path": "/guides/step-up" },
-        { "title": "Cache decisions", "path": "/guides/cache-decisions" }
+        { "title": "Cache decisions", "path": "/guides/cache-decisions" },
+        { "title": "Delegated access (AI agents)", "path": "/guides/delegated-access" }
       ]
     },
     {
