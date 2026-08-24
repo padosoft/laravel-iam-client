@@ -253,6 +253,31 @@ Three properties are non-negotiable and built in: a **malformed delegated token 
 to a single-subject check), **delegated decisions are never cached** (revocation freshness beats the extra
 round-trip), and the `typ: delegated+jwt` header is hygiene — the defence is server-side introspection.
 
+This client is also the **exchange half** when your app is itself a registered agent (an orchestrator, a
+flow-ai runtime): `TokenExchanger` performs the RFC 8693 call, authenticating with the same
+`private_key_jwt` config (`http.client_id` + `http.private_key` — an agent has ONE identity):
+
+```php
+use Padosoft\Iam\Contracts\Delegation\{TokenExchanger, TokenExchangeRequest};
+use Padosoft\Iam\Client\Auth\TokenExchangeFailedException;
+
+try {
+    $delegated = app(TokenExchanger::class)->exchange(new TokenExchangeRequest(
+        subjectToken: $userAccessToken,          // the USER's token — never handed to the LLM
+        scopes: ['orders:read'],                 // down-scoping (⊆ the grant)
+        audience: 'mcp://crm-tools',
+    ));
+    // $delegated->accessToken: TTL ≤ 300s, non-refreshable — re-exchange IS the revocation check.
+} catch (TokenExchangeFailedException $e) {
+    // $e->error distinguishes invalid_grant (revoked/suspended/session dead) from invalid_scope
+    // (outside the intersection). Never a degraded token: failures throw.
+}
+```
+
+And every request that passes `iam.can.delegated` hydrates **Laravel Context**: logs emitted downstream
+(and queued jobs, via Context's automatic dehydrate/hydrate) carry `iam_delegation` — `sub`, the `act`
+chain, the grant id — so cross-package audit queries ("everything agent X did, for anyone") join for free.
+
 ## How it fits the ecosystem
 
 | Package | Role |

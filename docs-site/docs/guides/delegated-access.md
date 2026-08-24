@@ -74,12 +74,48 @@ The `iam.can.delegated` middleware:
 1. requires a bearer, verifies it as **delegated** (a plain user token here is a `401` — human routes use
    `iam.can`, agent routes use this; never ambiguity);
 2. decides on the intersection, threading the token's `pds_dgr` as `delegation_grant_id`;
-3. on pass, exposes the delegation to your controller:
+3. on pass, exposes the delegation to your controller **and hydrates Laravel Context**:
 
 ```php
 $delegation = $request->attributes->get('iam_delegation');
 // ['sub' => 'user:42', 'actors' => ['agent:01J8XKQ0V2'], 'grant_id' => 'dgr_…', 'scopes' => [...]]
+
+use Illuminate\Support\Facades\Context;
+Context::get('iam_delegation'); // same shape — automatically attached to every log entry
 ```
+
+Because it rides [Laravel Context](https://laravel.com/docs/context), the delegation follows the request
+into **every log line and every queued job** (Context dehydrates/rehydrates itself) — no package
+downstream needs to know delegation exists, yet the audit pivot queries ("everything agent X did, for
+anyone") join across packages on these fields for free.
+
+## Outbound: performing the exchange (when your app IS the agent)
+
+The same package covers the client side of RFC 8693 for orchestrators and agent runtimes (e.g. flow-ai's
+`DelegatedIdentityResolver`): `TokenExchanger` — resolved from the container, authenticated with the same
+`private_key_jwt` settings (`http.client_id` + `http.private_key`: an agent has **one** identity).
+
+```php
+use Padosoft\Iam\Client\Auth\TokenExchangeFailedException;
+use Padosoft\Iam\Contracts\Delegation\TokenExchanger;
+use Padosoft\Iam\Contracts\Delegation\TokenExchangeRequest;
+
+try {
+    $delegated = app(TokenExchanger::class)->exchange(new TokenExchangeRequest(
+        subjectToken: $userAccessToken,   // the USER's token — held by the backend, never by the LLM
+        scopes: ['orders:read'],          // down-scoping (must be ⊆ the delegation grant)
+        audience: 'mcp://crm-tools',      // recommended for MCP tool servers (aud-scoped tokens)
+    ));
+    $delegated->accessToken;              // TTL ≤ 300s, non-refreshable
+} catch (TokenExchangeFailedException $e) {
+    $e->error; // 'invalid_grant' (revoked / agent suspended / session dead) vs 'invalid_scope'
+}
+```
+
+Deliberately **no caching and no refresh**: the re-exchange *is* the revocation freshness check — the
+server re-verifies grant and user session on every call. Failures **throw** (`$e->error` carries the RFC
+error code); a degraded or empty token is never returned. The exchange refuses insecure transport before
+sending anything: the subject token and the signed assertion never travel in cleartext.
 
 ## Delegated decisions are never cached
 

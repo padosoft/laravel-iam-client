@@ -6,11 +6,6 @@ namespace Padosoft\Iam\Client\Auth;
 
 use GuzzleHttp\ClientInterface;
 use Illuminate\Contracts\Cache\Repository as Cache;
-use Lcobucci\JWT\Encoding\ChainedFormatter;
-use Lcobucci\JWT\Encoding\JoseEncoder;
-use Lcobucci\JWT\Signer\Ecdsa\Sha256;
-use Lcobucci\JWT\Signer\Key\InMemory;
-use Lcobucci\JWT\Token\Builder;
 use Padosoft\Iam\Client\Support\TransportGuard;
 
 /**
@@ -61,8 +56,14 @@ final class PrivateKeyJwtTokenProvider implements TokenProvider
             'headers' => ['Accept' => 'application/json'],
             'form_params' => [
                 'grant_type' => 'client_credentials',
-                'client_assertion_type' => 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer',
-                'client_assertion' => $this->buildAssertion(),
+                'client_assertion_type' => ClientAssertion::TYPE,
+                'client_assertion' => ClientAssertion::build(
+                    $this->clientId,
+                    $this->privateKeyPem,
+                    rtrim($this->oauthUrl, '/').'/token',
+                    $this->kid,
+                    $this->assertionTtl,
+                ),
             ],
             'http_errors' => false,
             // IAM-39b: mai seguire un 30x https→http, che ricocherebbe l'assertion firmata in chiaro.
@@ -79,26 +80,6 @@ final class PrivateKeyJwtTokenProvider implements TokenProvider
         $this->cache->put($this->tokenKey(), $body['access_token'], max(1, $exp - $this->skew));
 
         return $body['access_token'];
-    }
-
-    private function buildAssertion(): string
-    {
-        if ($this->clientId === '' || $this->privateKeyPem === '') {
-            throw new \RuntimeException('private_key_jwt requires a non-empty client_id and private key');
-        }
-        $now = new \DateTimeImmutable;
-        $builder = (new Builder(new JoseEncoder, ChainedFormatter::default()))
-            ->issuedBy($this->clientId)                              // iss
-            ->relatedTo($this->clientId)                            // sub
-            ->permittedFor(rtrim($this->oauthUrl, '/').'/token')     // aud = token endpoint
-            ->identifiedBy(bin2hex(random_bytes(16)))                // jti (single-use)
-            ->issuedAt($now)
-            ->expiresAt($now->modify("+{$this->assertionTtl} seconds"));
-        if ($this->kid !== null && $this->kid !== '') {
-            $builder = $builder->withHeader('kid', $this->kid);
-        }
-
-        return $builder->getToken(new Sha256, InMemory::plainText($this->privateKeyPem))->toString();
     }
 
     private function tokenKey(): string

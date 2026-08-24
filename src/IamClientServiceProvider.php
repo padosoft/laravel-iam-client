@@ -10,6 +10,7 @@ use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Routing\Router;
 use Padosoft\Iam\Client\Auth\ClientCredentialsTokenProvider;
 use Padosoft\Iam\Client\Auth\DelegatedTokenVerifier;
+use Padosoft\Iam\Client\Auth\HttpTokenExchanger;
 use Padosoft\Iam\Client\Auth\PrivateKeyJwtTokenProvider;
 use Padosoft\Iam\Client\Auth\StaticTokenProvider;
 use Padosoft\Iam\Client\Auth\TokenProvider;
@@ -25,6 +26,7 @@ use Padosoft\Iam\Client\Http\Middleware\IamCanDelegated;
 use Padosoft\Iam\Client\Support\DelegatedBearerInspector;
 use Padosoft\Iam\Contracts\Authorization\AuthorizationEngine;
 use Padosoft\Iam\Contracts\Delegation\DelegatedAuthorizationEngine;
+use Padosoft\Iam\Contracts\Delegation\TokenExchanger;
 use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
 
@@ -68,6 +70,19 @@ final class IamClientServiceProvider extends PackageServiceProvider
             $this->stringConfig('http.client_id'),
             $this->stringConfig('http.client_secret'),
             $this->boolConfig('http.allow_insecure', false),
+        ));
+
+        // Lato client del Token Exchange (RFC 8693): riusa la config private_key_jwt
+        // esistente (http.client_id + http.private_key = l'identità dell'AGENTE).
+        // Non configurato ⇒ exchange() throwa `not_configured` (mai un token degradato);
+        // i runtime opzionali (flow-ai) verificano `app->bound(TokenExchanger::class)`.
+        $this->app->singleton(TokenExchanger::class, fn (Application $app): TokenExchanger => new HttpTokenExchanger(
+            new GuzzleClient(['timeout' => $this->intConfig('http.timeout', 5)]),
+            $this->stringConfig('http.oauth_url') ?? $this->deriveOauthUrl(),
+            $this->stringConfig('http.client_id'),
+            $this->resolvePrivateKey(),
+            $this->stringConfig('http.private_key_kid'),
+            allowInsecure: $this->boolConfig('http.allow_insecure', false),
         ));
     }
 

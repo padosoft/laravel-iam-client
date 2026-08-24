@@ -28,6 +28,9 @@ return [
         'private_key' => env('IAM_CLIENT_PRIVATE_KEY'),         // PEM ES256 (contenuto) oppure path a un .pem
         'private_key_kid' => env('IAM_CLIENT_PRIVATE_KEY_KID'), // kid della chiave nel JWKS registrato
         'oauth_url' => env('IAM_CLIENT_OAUTH_URL'),    // es. https://iam.example.com/oauth (altrimenti derivato da base_url)
+        //     Nota delega (RFC 8693): il TokenExchanger riusa client_id + private_key — quando l'app
+        //     è un AGENTE registrato in IAM, l'exchange si autentica con la STESSA private_key_jwt.
+        //     Nessuna chiave dedicata: un agente ha una sola identità.
         'timeout' => 5,
         // IAM-39: consenti http:// verso il token endpoint (client_secret/bearer in CHIARO). Solo dev.
         // Default false = fail-closed: un endpoint non-https (salvo localhost) non riceve credenziali.
