@@ -49,7 +49,10 @@ final class HttpDecider implements Decider
 
         try {
             $token = $this->tokens->resolve();
-            $response = $this->http->request('POST', rtrim($this->baseUrl, '/').'/decisions/check', [
+            // Richiesta delegata (catena act) → endpoint dedicato del modulo -agents:
+            // MAI /decisions/check single-subject per un token che porta act.
+            $endpoint = $request->isDelegated() ? '/decisions/check-delegated' : '/decisions/check';
+            $response = $this->http->request('POST', rtrim($this->baseUrl, '/').$endpoint, [
                 'headers' => array_filter([
                     'Accept' => 'application/json',
                     'Authorization' => $token !== null ? 'Bearer '.$token : null,

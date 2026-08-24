@@ -11,7 +11,13 @@ namespace Padosoft\Iam\Client;
  */
 final readonly class DecisionRequest
 {
-    /** @param array<string, mixed> $context fatti ABAC (amount, time, …) */
+    /**
+     * @param  array<string, mixed>  $context  fatti ABAC (amount, time, …)
+     * @param  list<string>|null  $actors  catena di delega (`agent:<id>`, attore corrente per primo).
+     *                                     Presente ⇒ decisione DELEGATA: intersezione utente ∩ agente
+     *                                     via `/decisions/check-delegated`, MAI il check single-subject.
+     * @param  string|null  $delegationGrantId  claim `pds_dgr` del token delegato (revoca mirata)
+     */
     public function __construct(
         public string $permission,
         public string $subjectId,
@@ -22,7 +28,15 @@ final readonly class DecisionRequest
         public array $context = [],
         public string $currentAal = 'aal1',
         public bool $explain = false,
+        public ?array $actors = null,
+        public ?string $delegationGrantId = null,
     ) {}
+
+    /** La richiesta riguarda un token delegato (catena `act` presente). */
+    public function isDelegated(): bool
+    {
+        return $this->actors !== null && $this->actors !== [];
+    }
 
     /**
      * Chiave di cache stabile: la decisione dipende da TUTTI gli input (incl. context ABAC e AAL),
@@ -41,13 +55,14 @@ final readonly class DecisionRequest
             $this->subjectType, $this->subjectId, $this->permission,
             $this->organization, $this->application, $this->resource,
             $this->context, $this->currentAal,
+            $this->actors, $this->delegationGrantId,
         ], JSON_THROW_ON_ERROR));
     }
 
     /** @return array<string, mixed> */
     public function toArray(): array
     {
-        return [
+        $body = [
             'subject' => ['type' => $this->subjectType, 'id' => $this->subjectId],
             'permission' => $this->permission,
             'organization' => $this->organization,
@@ -57,5 +72,13 @@ final readonly class DecisionRequest
             'current_aal' => $this->currentAal,
             'explain' => $this->explain,
         ];
+        if ($this->isDelegated()) {
+            $body['actors'] = $this->actors;
+            if ($this->delegationGrantId !== null && $this->delegationGrantId !== '') {
+                $body['delegation_grant_id'] = $this->delegationGrantId;
+            }
+        }
+
+        return $body;
     }
 }

@@ -67,3 +67,21 @@
   statico) e l'assertion private_key_jwt verso `oauth_url`: erano buchi. Centralizza in `TransportGuard::allows`
   e chiamalo su `HttpDecider` (decision call → `deny("insecure transport")`), `PrivateKeyJwtTokenProvider` e
   `ClientCredentialsTokenProvider`. `https` sempre, `http` solo loopback o `allow_insecure`; scheme assente → nega.
+
+## Delegated PEP (task/delegated-pep, 2026-08-23)
+
+- **Un token con claim `act` non è MAI valutabile come token utente pieno.** Il degrado silenzioso
+  è il confused-deputy che la delega previene: l'inspector LANCIA su un delegato malformato,
+  `LocalDecider` senza il modulo -agents NEGA le richieste delegate, `HttpDecider` le instrada su
+  `/decisions/check-delegated` (mai il check single-subject).
+- **I token delegati sono introspection-mandatory** (`DelegatedTokenVerifier`): il parse locale
+  (senza firma — il client non custodisce chiavi) serve SOLO a instradare; la vista autorizzativa
+  nasce dai claims dell'introspection, che verifica firma, scadenza e vitalità della sessione.
+- **Le decisioni delegate non si cachano MAI** (`CachingDecider`): la revoca di una grant deve
+  mordere al check successivo, non "entro il TTL". La cache key include comunque actors+grant id
+  (chiavi diverse ⇒ mai collisione con le decisioni normali).
+- **`DecisionRequest` è cresciuto in modo additivo** (trailing optional params): zero impatti sui
+  costruttori esistenti; `toArray()` emette `actors`/`delegation_grant_id` solo quando presenti
+  (wire compat con i server pre-delegation).
+- Middleware nuovo `iam.can.delegated:permission` per le rotte ad audience delegata: 401 senza
+  bearer delegato verificato, 403 se l'intersezione nega, contesto `iam_delegation` sul request.

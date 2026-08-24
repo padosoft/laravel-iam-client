@@ -52,6 +52,53 @@ final class IamClient
         return $this->decider->decide($this->request($subjectId, $ability, $context));
     }
 
+    /**
+     * Decisione DELEGATA: l'utente agisce ATTRAVERSO una catena di agenti (claim `act`).
+     * L'esito è l'intersezione utente ∩ agente calcolata dal PDP delegato — mai il
+     * check single-subject. Chiave riservata extra del context: `delegation_grant_id`
+     * (claim `pds_dgr` del token). Fail-closed: catena vuota o subject assente ⇒ deny.
+     *
+     * @param  list<string>  $actors  catena `agent:<id>`, attore corrente per primo
+     * @param  array<string, mixed>  $context
+     */
+    public function checkDelegated(Authenticatable|string|null $user, array $actors, string $ability, array $context = []): IamDecision
+    {
+        $subjectId = $this->resolveSubjectId($user);
+        if ($subjectId === '') {
+            return IamDecision::deny('no-subject');
+        }
+        $actors = array_values(array_filter($actors, static fn ($a): bool => is_string($a) && $a !== ''));
+        if ($actors === []) {
+            return IamDecision::deny('no-actor-chain');
+        }
+
+        $grantId = $this->pull($context, 'delegation_grant_id');
+        $base = $this->request($subjectId, $ability, $context);
+
+        return $this->decider->decide(new DecisionRequest(
+            permission: $base->permission,
+            subjectId: $base->subjectId,
+            subjectType: $base->subjectType,
+            organization: $base->organization,
+            application: $base->application,
+            resource: $base->resource,
+            context: $base->context,
+            currentAal: $base->currentAal,
+            explain: $base->explain,
+            actors: $actors,
+            delegationGrantId: $grantId,
+        ));
+    }
+
+    /**
+     * @param  list<string>  $actors
+     * @param  array<string, mixed>  $context
+     */
+    public function canDelegated(Authenticatable|string|null $user, array $actors, string $ability, array $context = []): bool
+    {
+        return $this->checkDelegated($user, $actors, $ability, $context)->granted();
+    }
+
     /** @param array<string, mixed> $context */
     public function request(string $subjectId, string $ability, array $context = []): DecisionRequest
     {
